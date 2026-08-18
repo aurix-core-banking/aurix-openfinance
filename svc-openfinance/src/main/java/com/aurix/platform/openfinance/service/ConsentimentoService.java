@@ -7,6 +7,12 @@ import com.aurix.platform.openfinance.repository.ConsentimentoRepository;
 import com.aurix.platform.openfinance.repository.ContaConsentidaRepository;
 import com.aurix.platform.openfinance.repository.TransacaoConsentidaRepository;
 import com.aurix.platform.openfinance.repository.PessoaConsentidaRepository;
+import com.aurix.platform.openfinance.repository.CartaoConsentidoRepository;
+import com.aurix.platform.openfinance.repository.FaturaConsentidaRepository;
+import com.aurix.platform.openfinance.repository.TransacaoCartaoConsentidaRepository;
+import com.aurix.platform.openfinance.repository.EmprestimoConsentidoRepository;
+import com.aurix.platform.openfinance.repository.SeguroConsentidoRepository;
+import com.aurix.platform.openfinance.repository.PixConsentidoRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,6 +32,12 @@ public class ConsentimentoService {
     private final ContaConsentidaRepository contaRepository;
     private final TransacaoConsentidaRepository transacaoRepository;
     private final PessoaConsentidaRepository pessoaRepository;
+    private final CartaoConsentidoRepository cartaoRepository;
+    private final FaturaConsentidaRepository faturaRepository;
+    private final TransacaoCartaoConsentidaRepository txCartaoRepository;
+    private final EmprestimoConsentidoRepository emprestimoRepository;
+    private final SeguroConsentidoRepository seguroRepository;
+    private final PixConsentidoRepository pixRepository;
 
     @Value("${aurix.openfinance.consent-max-duration-days:365}")
     private int maxDurationDays;
@@ -33,11 +45,23 @@ public class ConsentimentoService {
     public ConsentimentoService(ConsentimentoRepository repository,
                                 ContaConsentidaRepository contaRepository,
                                 TransacaoConsentidaRepository transacaoRepository,
-                                PessoaConsentidaRepository pessoaRepository) {
+                                PessoaConsentidaRepository pessoaRepository,
+                                CartaoConsentidoRepository cartaoRepository,
+                                FaturaConsentidaRepository faturaRepository,
+                                TransacaoCartaoConsentidaRepository txCartaoRepository,
+                                EmprestimoConsentidoRepository emprestimoRepository,
+                                SeguroConsentidoRepository seguroRepository,
+                                PixConsentidoRepository pixRepository) {
         this.repository = repository;
         this.contaRepository = contaRepository;
         this.transacaoRepository = transacaoRepository;
         this.pessoaRepository = pessoaRepository;
+        this.cartaoRepository = cartaoRepository;
+        this.faturaRepository = faturaRepository;
+        this.txCartaoRepository = txCartaoRepository;
+        this.emprestimoRepository = emprestimoRepository;
+        this.seguroRepository = seguroRepository;
+        this.pixRepository = pixRepository;
     }
 
     public ConsentimentoResponse criar(ConsentimentoRequest request, Long userId) {
@@ -119,17 +143,25 @@ public class ConsentimentoService {
     }
 
     private void limparDadosExpirados(String consentId) {
-        long contas = contaRepository.findByConsentId(consentId).size();
-        long transacoes = transacaoRepository.findByConsentId(consentId).size();
-        long pessoas = pessoaRepository.findByConsentId(consentId).size();
-        log.info("Limpando dados expirados: consentId={}, contas={}, transações={}, pessoas={}",
-            consentId, contas, transacoes, pessoas);
+        log.info("Limpando dados expirados: consentId={}", consentId);
         transacaoRepository.findByConsentId(consentId)
             .forEach(t -> transacaoRepository.deleteById(t.getId()));
         contaRepository.findByConsentId(consentId)
             .forEach(c -> contaRepository.deleteById(c.getId()));
         pessoaRepository.findByConsentId(consentId)
             .forEach(p -> pessoaRepository.deleteById(p.getId()));
+        cartaoRepository.findByConsentId(consentId)
+            .forEach(c -> cartaoRepository.deleteById(c.getId()));
+        faturaRepository.findByConsentId(consentId)
+            .forEach(f -> faturaRepository.deleteById(f.getId()));
+        txCartaoRepository.findByConsentId(consentId)
+            .forEach(t -> txCartaoRepository.deleteById(t.getId()));
+        emprestimoRepository.findByConsentId(consentId)
+            .forEach(e -> emprestimoRepository.deleteById(e.getId()));
+        seguroRepository.findByConsentId(consentId)
+            .forEach(s -> seguroRepository.deleteById(s.getId()));
+        pixRepository.findByConsentId(consentId)
+            .forEach(p -> pixRepository.deleteById(p.getId()));
     }
 
     private ConsentimentoResponse toResponse(Consentimento c) {

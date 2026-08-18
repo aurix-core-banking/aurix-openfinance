@@ -1,570 +1,86 @@
 openapi: 3.0.3
 info:
-  title: Aurix Open Finance - APIs BACEN Fase 1
+  title: Aurix Open Finance Brasil API
   description: |
-    APIs Open Finance Brasil — Fase 1 (contas, transações, consentimento).
-    Segue o padrão do Banco Central do Brasil para Open Finance.
+    APIs do Open Finance Brasil (BACEN) seguindo o padrão FAPI-Brazil.
+    **Fase 1**: Contas, transações, saldos, consentimento, dados pessoais.
+    **Fase 2**: Cartões de crédito, faturas, transações de cartão.
+    **Fase 3**: Empréstimos, seguros, PIX.
   version: 1.0.0
   contact:
     name: Aurix Platform
-    url: https://github.com/aurix-core-banking/aurix-openfinance
+    url: https://github.com/aurix-core-banking
 
 servers:
   - url: http://localhost:8096
     description: Desenvolvimento local
-  - url: https://api.openfinance.seubanco.com.br
-    description: Produção
 
 tags:
   - name: Consentimentos
-    description: Gerenciamento de consentimentos Open Finance
+    description: Gerenciamento de consentimentos (FAPI-Brazil)
   - name: Contas
-    description: Dados de contas autorizadas
+    description: Dados de contas (Fase 1)
   - name: Transações
-    description: Extrato de transações de contas autorizadas
+    description: Transações de contas (Fase 1)
   - name: Dados Pessoais
-    description: Dados de identificação, endereços e contatos (pessoa física e jurídica)
+    description: Identificação, endereços, contatos (Fase 1)
   - name: Cartões de Crédito
-    description: Dados de cartões de crédito (Fase 2)
-
-paths:
-  /open-finance/v1/consents:
-    post:
-      tags: [Consentimentos]
-      summary: Criar novo consentimento
-      operationId: criarConsentimento
-      security:
-        - OAuth2AuthServer:
-            - consent
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ConsentimentoRequest'
-      responses:
-        '201':
-          description: Consentimento criado com sucesso
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConsentimentoResponse'
-        '400':
-          description: Requisição inválida
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErroResponse'
-        '401':
-          description: Não autorizado
-
-  /open-finance/v1/consents/{consentId}:
-    get:
-      tags: [Consentimentos]
-      summary: Buscar consentimento por ID
-      operationId: buscarConsentimento
-      security:
-        - OAuth2AuthServer:
-            - consent
-      parameters:
-        - name: consentId
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Consentimento encontrado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConsentimentoResponse'
-        '404':
-          description: Consentimento não encontrado
-
-  /open-finance/v1/consents/{consentId}/authorise:
-    post:
-      tags: [Consentimentos]
-      summary: Aprovar consentimento
-      operationId: aprovarConsentimento
-      security:
-        - OAuth2AuthServer:
-            - consent
-      parameters:
-        - name: consentId
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Consentimento aprovado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConsentimentoResponse'
-        '404':
-          description: Consentimento não encontrado
-
-  /open-finance/v1/consents/{consentId}/reject:
-    post:
-      tags: [Consentimentos]
-      summary: Rejeitar consentimento
-      operationId: rejeitarConsentimento
-      security:
-        - OAuth2AuthServer:
-            - consent
-      parameters:
-        - name: consentId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: motivo
-          in: query
-          required: false
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Consentimento rejeitado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConsentimentoResponse'
-        '404':
-          description: Consentimento não encontrado
-
-  /open-finance/v1/consents/{consentId}/revoke:
-    post:
-      tags: [Consentimentos]
-      summary: Revogar consentimento
-      operationId: revogarConsentimento
-      security:
-        - OAuth2AuthServer:
-            - consent
-      parameters:
-        - name: consentId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: motivo
-          in: query
-          required: false
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Consentimento revogado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConsentimentoResponse'
-        '404':
-          description: Consentimento não encontrado
-
-  /open-finance/v1/accounts:
-    get:
-      tags: [Contas]
-      summary: Listar contas autorizadas
-      operationId: listarContas
-      security:
-        - OAuth2AuthServer:
-            - accounts
-      parameters:
-        - name: X-Consent-Id
-          in: header
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Lista de contas retornada com sucesso
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ContaResponse'
-        '400':
-          description: Requisição inválida
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErroResponse'
-        '401':
-          description: Não autorizado
-
-  /open-finance/v1/accounts/{accountId}:
-    get:
-      tags: [Contas]
-      summary: Buscar conta por ID
-      operationId: buscarConta
-      security:
-        - OAuth2AuthServer:
-            - accounts
-      parameters:
-        - name: accountId
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Conta encontrada
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ContaResponse'
-        '404':
-          description: Conta não encontrada
-
-  /open-finance/v1/accounts/{accountId}/balances:
-    get:
-      tags: [Contas]
-      summary: Obter saldo da conta autorizada
-      operationId: obterSaldoConta
-      security:
-        - OAuth2AuthServer:
-            - accounts
-      parameters:
-        - name: accountId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: X-Consent-Id
-          in: header
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Saldo retornado com sucesso
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SaldoResponse'
-        '400':
-          description: Requisição inválida
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErroResponse'
-        '401':
-          description: Não autorizado
-
-  /open-finance/v1/accounts/{accountId}/transactions:
-    get:
-      tags: [Transações]
-      summary: Listar transações da conta autorizada
-      operationId: listarTransacoes
-      security:
-        - OAuth2AuthServer:
-            - accounts
-      parameters:
-        - name: accountId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: X-Consent-Id
-          in: header
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Lista de transações retornada com sucesso
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/TransacaoResponse'
-        '400':
-          description: Requisição inválida
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErroResponse'
-        '401':
-          description: Não autorizado
-
-  /open-finance/v1/customers/personal/identifications:
-    get:
-      tags: [Dados Pessoais]
-      summary: Listar dados de identificação pessoal
-      operationId: listarIdentificacoesPessoais
-      security:
-        - OAuth2AuthServer:
-            - customers
-      parameters:
-        - name: X-Consent-Id
-          in: header
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Lista de dados pessoais retornada com sucesso
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PessoaResponse'
-        '401':
-          description: Não autorizado
-
-  /open-finance/v1/customers/personal/identifications/{customerId}:
-    get:
-      tags: [Dados Pessoais]
-      summary: Buscar dados de identificação por customerId
-      operationId: buscarIdentificacaoPessoal
-      security:
-        - OAuth2AuthServer:
-            - customers
-      parameters:
-        - name: customerId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: X-Consent-Id
-          in: header
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Dados pessoais encontrados
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PessoaResponse'
-        '404':
-          description: Pessoa não encontrada
-
-  /open-finance/v1/customers/personal/addresses:
-    get:
-      tags: [Dados Pessoais]
-      summary: Listar endereços pessoais
-      operationId: listarEnderecosPessoais
-      security:
-        - OAuth2AuthServer:
-            - customers
-      parameters:
-        - name: X-Consent-Id
-          in: header
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Lista de endereços retornada com sucesso
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/EnderecoResponse'
-        '401':
-          description: Não autorizado
-
-  /open-finance/v1/customers/personal/phone-numbers:
-    get:
-      tags: [Dados Pessoais]
-      summary: Listar telefones
-      operationId: listarTelefones
-      security:
-        - OAuth2AuthServer:
-            - customers
-      parameters:
-        - name: X-Consent-Id
-          in: header
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Lista de contatos retornada com sucesso
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ContatoResponse'
-        '401':
-          description: Não autorizado
-
-  /open-finance/v1/customers/personal/email:
-    get:
-      tags: [Dados Pessoais]
-      summary: Listar emails
-      operationId: listarEmails
-      security:
-        - OAuth2AuthServer:
-            - customers
-      parameters:
-        - name: X-Consent-Id
-          in: header
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Lista de contatos retornada com sucesso
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ContatoResponse'
-        '401':
-          description: Não autorizado
-
-  /open-finance/v1/customers/business/identifications:
-    get:
-      tags: [Dados Pessoais]
-      summary: Listar dados de identificação empresarial
-      operationId: listarIdentificacoesEmpresariais
-      security:
-        - OAuth2AuthServer:
-            - customers
-      parameters:
-        - name: X-Consent-Id
-          in: header
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Lista de dados empresariais retornada com sucesso
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PessoaResponse'
-        '401':
-          description: Não autorizado
-
-  /open-finance/v1/customers/business/identifications/{customerId}:
-    get:
-      tags: [Dados Pessoais]
-      summary: Buscar dados empresariais por customerId
-      operationId: buscarIdentificacaoEmpresarial
-      security:
-        - OAuth2AuthServer:
-            - customers
-      parameters:
-        - name: customerId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: X-Consent-Id
-          in: header
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Dados empresariais encontrados
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PessoaResponse'
-        '404':
-          description: Pessoa não encontrada
-
-  /open-finance/v1/customers/business/addresses:
-    get:
-      tags: [Dados Pessoais]
-      summary: Listar endereços empresariais
-      operationId: listarEnderecosEmpresariais
-      security:
-        - OAuth2AuthServer:
-            - customers
-      parameters:
-        - name: X-Consent-Id
-          in: header
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Lista de endereços empresariais retornada com sucesso
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/EnderecoResponse'
-        '401':
-          description: Não autorizado
-
-  /open-finance/v1/credit-cards:
-    get:
-      tags: [Cartões de Crédito]
-      summary: Listar cartões de crédito (Fase 2)
-      operationId: listarCartoesCredito
-      security:
-        - OAuth2AuthServer:
-            - credit-cards
-      responses:
-        '200':
-          description: Fase 2 - BACEN
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                  message:
-                    type: string
-        '401':
-          description: Não autorizado
+    description: Cartões de crédito (Fase 2)
+  - name: Faturas
+    description: Faturas de cartão (Fase 2)
+  - name: Transações de Cartão
+    description: Transações de cartão de crédito (Fase 2)
+  - name: Empréstimos
+    description: Empréstimos e financiamentos (Fase 3)
+  - name: Seguros
+    description: Apólices de seguro (Fase 3)
+  - name: PIX
+    description: Transferências PIX (Fase 3)
+  - name: Health
+    description: Health check
 
 components:
   securitySchemes:
-    OAuth2AuthServer:
+    OAuth2:
       type: oauth2
-      description: OAuth 2.0 Authorization Server (FAPI-Brazil)
       flows:
         authorizationCode:
-          authorizationUrl: https://auth.seubanco.com.br/oauth/authorize
-          tokenUrl: https://auth.seubanco.com.br/oauth/token
+          authorizationUrl: https://auth.openfinancebrasil.org.br/oauth/authorize
+          tokenUrl: https://auth.openfinancebrasil.org.br/oauth/token
           scopes:
-            consent: Gerenciar consentimentos
+            openid: OpenID Connect
+            consents: Gerenciar consentimentos
             accounts: Acessar dados de contas
-            credit-cards: Acessar dados de cartões de crédito
-            transactions: Acessar transações
+            credit-cards: Acessar dados de cartões
+            loans: Acessar dados de empréstimos
+            insurance: Acessar dados de seguros
+            pix: Acessar dados de PIX
+            customers: Acessar dados pessoais
 
   schemas:
     ConsentimentoRequest:
       type: object
-      required:
-        - clientId
-        - institutionCode
+      required: [clientId, permissions]
       properties:
         clientId:
           type: string
-          description: ID do client Open Finance
-        institutionCode:
-          type: string
-          description: Código da instituição (ISPB)
+          description: Identificador do cliente (receptor)
         permissions:
           type: array
           items:
             type: string
+            enum: [accounts, credit-cards, loans, insurance, pix, customers]
           description: Permissões solicitadas
-        expirationDays:
-          type: integer
-          description: Dias até expiração (máx 365)
+        expirationDateTime:
+          type: string
+          format: date-time
+          description: Data/hora de expiração (máx 365 dias)
+        transactionFromDateTime:
+          type: string
+          format: date-time
+        transactionToDateTime:
+          type: string
+          format: date-time
 
     ConsentimentoResponse:
       type: object
@@ -575,12 +91,7 @@ components:
           type: string
         status:
           type: string
-          enum:
-            - AWAITING_AUTHORISATION
-            - AUTHORISED
-            - REJECTED
-            - REVOKED
-            - EXPIRED
+          enum: [AWAITING_AUTHORISATION, AUTHORISED, REJECTED, REVOKED, EXPIRED]
         permissions:
           type: array
           items:
@@ -597,37 +108,34 @@ components:
     ContaResponse:
       type: object
       properties:
-        accountId:
+        contaId:
           type: string
-        institutionCode:
+        agencia:
           type: string
-        moeda:
+        numero:
           type: string
         tipoConta:
           type: string
-          enum:
-            - CONTA_DE_PAGAMENTO
-            - CONTA_DE_DEPOSITO
-            - CONTA_POUPANCA
-            - CONTA_SALARIO
+        moeda:
+          type: string
         statusConta:
           type: string
-        saldoDisponivel:
-          type: number
-        saldoAtual:
-          type: number
-        dataAtualizacao:
+        nomeInstituicao:
           type: string
-          format: date-time
+        cnpjInstituicao:
+          type: string
+        dataAbertura:
+          type: string
+          format: date
 
     SaldoResponse:
       type: object
       properties:
-        accountId:
+        contaId:
           type: string
         saldoDisponivel:
           type: number
-        saldoAtual:
+        saldoBloqueado:
           type: number
         moeda:
           type: string
@@ -640,76 +148,841 @@ components:
       properties:
         transactionId:
           type: string
-        tipoTransacao:
-          type: string
-          enum:
-            - CREDITO
-            - DEBITO
         valor:
           type: number
         moeda:
           type: string
-        estabelecimento:
+        tipoTransacao:
           type: string
         descricao:
           type: string
         dataTransacao:
           type: string
           format: date-time
-        dataProcessamento:
-          type: string
-          format: date-time
 
     PessoaResponse:
       type: object
       properties:
-        customerId:
+        pessoaId:
           type: string
-        tipoPessoa:
+        tipoDocumento:
           type: string
-          enum:
-            - FISICA
-            - JURIDICA
-        cpfCnpj:
+        documento:
           type: string
         nomeCompleto:
+          type: string
+        nomeSocial:
           type: string
         dataNascimento:
           type: string
           format: date
-        sexo:
-          type: string
-        nomeMae:
-          type: string
-
-    EnderecoResponse:
-      type: object
-      properties:
-        logradouro:
-          type: string
-        cidade:
-          type: string
-        estado:
-          type: string
-        cep:
-          type: string
-        pais:
-          type: string
-
-    ContatoResponse:
-      type: object
-      properties:
-        email:
-          type: string
         telefone:
           type: string
+        email:
+          type: string
+        endereco:
+          type: object
+          properties:
+            logradouro:
+              type: string
+            numero:
+              type: string
+            complemento:
+              type: string
+            bairro:
+              type: string
+            cidade:
+              type: string
+            estado:
+              type: string
+            cep:
+              type: string
+
+    CartaoResponse:
+      type: object
+      properties:
+        cartaoId:
+          type: string
+        bandeira:
+          type: string
+        finalNumero:
+          type: string
+        statusCartao:
+          type: string
+        limiteCredito:
+          type: number
+        limiteDisponivel:
+          type: number
+        valorFaturaAtual:
+          type: number
+        dataVencimentoFatura:
+          type: string
+          format: date
+
+    FaturaResponse:
+      type: object
+      properties:
+        faturaId:
+          type: string
+        valorTotal:
+          type: number
+        valorMinimo:
+          type: number
+        valorPago:
+          type: number
+        dataVencimento:
+          type: string
+          format: date
+        dataPagamento:
+          type: string
+          format: date
+
+    TransacaoCartaoResponse:
+      type: object
+      properties:
+        transactionId:
+          type: string
+        valor:
+          type: number
+        moeda:
+          type: string
+        estabelecimento:
+          type: string
+        tipoTransacao:
+          type: string
+        dataTransacao:
+          type: string
+          format: date-time
+
+    EmprestimoResponse:
+      type: object
+      properties:
+        emprestimoId:
+          type: string
+        tipoEmprestimo:
+          type: string
+        valorContratado:
+          type: number
+        valorSaldoDevedor:
+          type: number
+        taxaJuros:
+          type: number
+        prazoMeses:
+          type: integer
+        parcelasPagas:
+          type: integer
+        parcelasRestantes:
+          type: integer
+        valorParcela:
+          type: number
+        dataContratacao:
+          type: string
+          format: date
+        dataVencimentoPrimeiraParcela:
+          type: string
+          format: date
+        statusEmprestimo:
+          type: string
+
+    SeguroResponse:
+      type: object
+      properties:
+        apoliceId:
+          type: string
+        tipoSeguro:
+          type: string
+        nomeSeguradora:
+          type: string
+        premioMensal:
+          type: number
+        premioTotal:
+          type: number
+        valorSegurado:
+          type: number
+        dataInicio:
+          type: string
+          format: date
+        dataFim:
+          type: string
+          format: date
+        statusApolice:
+          type: string
+
+    PixResponse:
+      type: object
+      properties:
+        pixId:
+          type: string
+        tipoPix:
+          type: string
+        chavedePix:
+          type: string
+        tipoChave:
+          type: string
+        valor:
+          type: number
+        moeda:
+          type: string
+        descricao:
+          type: string
+        statusPix:
+          type: string
+        dataPix:
+          type: string
+          format: date-time
+
+    FapiInteractionId:
+      type: string
+      description: UUID de correlação FAPI (x-fapi-interaction-id)
 
     ErroResponse:
       type: object
       properties:
-        erro:
-          type: string
-        mensagem:
-          type: string
-        codigoHttp:
-          type: integer
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+              message:
+                type: string
+
+security:
+  - OAuth2: []
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  # ============================================================
+  # Fase 1 — Consentimentos
+  # ============================================================
+  /open-finance/v1/consents:
+    post:
+      tags: [Consentimentos]
+      summary: Criar consentimento
+      operationId: criarConsentimento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentimentoRequest'
+      responses:
+        '201':
+          description: Consentimento criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentimentoResponse'
+    get:
+      tags: [Consentimentos]
+      summary: Listar consentimentos
+      operationId: listarConsentimentos
+      responses:
+        '200':
+          description: Lista de consentimentos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConsentimentoResponse'
+
+  /open-finance/v1/consents/{consentId}:
+    get:
+      tags: [Consentimentos]
+      summary: Buscar consentimento
+      operationId: buscarConsentimento
+      parameters:
+        - name: consentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Consentimento encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentimentoResponse'
+        '404':
+          description: Não encontrado
+
+  /open-finance/v1/consents/{consentId}/authorise:
+    post:
+      tags: [Consentimentos]
+      summary: Autorizar consentimento
+      operationId: autorizarConsentimento
+      parameters:
+        - name: consentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Consentimento autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentimentoResponse'
+
+  /open-finance/v1/consents/{consentId}/reject:
+    post:
+      tags: [Consentimentos]
+      summary: Rejeitar consentimento
+      operationId: rejeitarConsentimento
+      parameters:
+        - name: consentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Consentimento rejeitado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentimentoResponse'
+
+  /open-finance/v1/consents/{consentId}/revoke:
+    post:
+      tags: [Consentimentos]
+      summary: Revogar consentimento
+      operationId: revogarConsentimento
+      parameters:
+        - name: consentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Consentimento revogado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentimentoResponse'
+
+  # ============================================================
+  # Fase 1 — Contas
+  # ============================================================
+  /open-finance/v1/accounts:
+    get:
+      tags: [Contas]
+      summary: Listar contas do cliente
+      operationId: listarContas
+      parameters:
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Lista de contas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContaResponse'
+
+  /open-finance/v1/accounts/{accountId}:
+    get:
+      tags: [Contas]
+      summary: Buscar conta
+      operationId: buscarConta
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Conta encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContaResponse'
+        '404':
+          description: Não encontrada
+
+  /open-finance/v1/accounts/{accountId}/balances:
+    get:
+      tags: [Contas]
+      summary: Buscar saldos da conta
+      operationId: buscarSaldos
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Saldos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaldoResponse'
+
+  # ============================================================
+  # Fase 1 — Transações
+  # ============================================================
+  /open-finance/v1/accounts/{accountId}/transactions:
+    get:
+      tags: [Transações]
+      summary: Listar transações da conta
+      operationId: listarTransacoes
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fromDateTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: toDateTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Lista de transações
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransacaoResponse'
+
+  # ============================================================
+  # Fase 1 — Dados Pessoais
+  # ============================================================
+  /open-finance/v1/customers/personal/identifications:
+    get:
+      tags: [Dados Pessoais]
+      summary: Identificações pessoais do cliente
+      operationId: listarIdentificacoesPessoais
+      parameters:
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Lista de identificações
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PessoaResponse'
+
+  /open-finance/v1/customers/personal/addresses:
+    get:
+      tags: [Dados Pessoais]
+      summary: Endereços pessoais do cliente
+      operationId: listarEnderecosPessoais
+      parameters:
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Lista de endereços
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PessoaResponse'
+
+  /open-finance/v1/customers/personal/phone-numbers:
+    get:
+      tags: [Dados Pessoais]
+      summary: Telefones pessoais do cliente
+      operationId: listarTelefonesPessoais
+      parameters:
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Lista de telefones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PessoaResponse'
+
+  /open-finance/v1/customers/personal/email:
+    get:
+      tags: [Dados Pessoais]
+      summary: E-mail pessoal do cliente
+      operationId: listarEmailPessoal
+      parameters:
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Lista de e-mails
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PessoaResponse'
+
+  /open-finance/v1/customers/business/identifications:
+    get:
+      tags: [Dados Pessoais]
+      summary: Identificações PJ do cliente
+      operationId: listarIdentificacoesPJ
+      parameters:
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Lista de identificações PJ
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PessoaResponse'
+
+  /open-finance/v1/customers/business/addresses:
+    get:
+      tags: [Dados Pessoais]
+      summary: Endereços PJ do cliente
+      operationId: listarEnderecosPJ
+      parameters:
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Lista de endereços PJ
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PessoaResponse'
+
+  # ============================================================
+  # Fase 2 — Cartões de Crédito
+  # ============================================================
+  /open-finance/v1/credit-cards:
+    get:
+      tags: [Cartões de Crédito]
+      summary: Listar cartões de crédito
+      operationId: listarCartoes
+      parameters:
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Lista de cartões
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CartaoResponse'
+
+  /open-finance/v1/credit-cards/{creditCardId}:
+    get:
+      tags: [Cartões de Crédito]
+      summary: Buscar cartão de crédito
+      operationId: buscarCartao
+      parameters:
+        - name: creditCardId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Cartão encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartaoResponse'
+        '404':
+          description: Não encontrado
+
+  /open-finance/v1/credit-cards/{creditCardId}/bills:
+    get:
+      tags: [Faturas]
+      summary: Listar faturas do cartão
+      operationId: listarFaturas
+      parameters:
+        - name: creditCardId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Lista de faturas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FaturaResponse'
+
+  /open-finance/v1/credit-cards/{creditCardId}/bills/{billId}:
+    get:
+      tags: [Faturas]
+      summary: Buscar fatura do cartão
+      operationId: buscarFatura
+      parameters:
+        - name: creditCardId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: billId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Fatura encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FaturaResponse'
+        '404':
+          description: Não encontrada
+
+  /open-finance/v1/credit-cards/{creditCardId}/transactions:
+    get:
+      tags: [Transações de Cartão]
+      summary: Listar transações do cartão
+      operationId: listarTransacoesCartao
+      parameters:
+        - name: creditCardId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Lista de transações do cartão
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransacaoCartaoResponse'
+
+  # ============================================================
+  # Fase 3 — Empréstimos
+  # ============================================================
+  /open-finance/v1/loans:
+    get:
+      tags: [Empréstimos]
+      summary: Listar empréstimos do cliente
+      operationId: listarEmprestimos
+      parameters:
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Lista de empréstimos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EmprestimoResponse'
+
+  /open-finance/v1/loans/{loanId}:
+    get:
+      tags: [Empréstimos]
+      summary: Buscar empréstimo
+      operationId: buscarEmprestimo
+      parameters:
+        - name: loanId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Empréstimo encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmprestimoResponse'
+        '404':
+          description: Não encontrado
+
+  # ============================================================
+  # Fase 3 — Seguros
+  # ============================================================
+  /open-finance/v1/insurance:
+    get:
+      tags: [Seguros]
+      summary: Listar seguros do cliente
+      operationId: listarSeguros
+      parameters:
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Lista de seguros
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SeguroResponse'
+
+  /open-finance/v1/insurance/{insuranceId}:
+    get:
+      tags: [Seguros]
+      summary: Buscar seguro
+      operationId: buscarSeguro
+      parameters:
+        - name: insuranceId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Seguro encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeguroResponse'
+        '404':
+          description: Não encontrado
+
+  # ============================================================
+  # Fase 3 — PIX
+  # ============================================================
+  /open-finance/v1/pix/credit-transfers:
+    get:
+      tags: [PIX]
+      summary: Listar transferências PIX
+      operationId: listarPix
+      parameters:
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: Lista de PIX
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PixResponse'
+
+  /open-finance/v1/pix/credit-transfers/{pixId}:
+    get:
+      tags: [PIX]
+      summary: Buscar transferência PIX
+      operationId: buscarPix
+      parameters:
+        - name: pixId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FapiAuthDate'
+        - $ref: '#/components/parameters/FapiIpAddress'
+        - $ref: '#/components/parameters/FapiInteractionId'
+      responses:
+        '200':
+          description: PIX encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PixResponse'
+        '404':
+          description: Não encontrado
+
+components:
+  parameters:
+    FapiAuthDate:
+      name: x-fapi-auth-date
+      in: header
+      required: true
+      schema:
+        type: string
+        format: date-time
+    FapiIpAddress:
+      name: x-fapi-auth-ip-address
+      in: header
+      required: true
+      schema:
+        type: string
+    FapiInteractionId:
+      name: x-fapi-interaction-id
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
