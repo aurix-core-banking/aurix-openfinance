@@ -1,0 +1,455 @@
+openapi: 3.0.3
+info:
+  title: Aurix Open Finance - APIs BACEN Fase 1
+  description: |
+    APIs Open Finance Brasil — Fase 1 (contas, transações, consentimento).
+    Segue o padrão do Banco Central do Brasil para Open Finance.
+  version: 1.0.0
+  contact:
+    name: Aurix Platform
+    url: https://github.com/aurix-core-banking/aurix-openfinance
+
+servers:
+  - url: http://localhost:8096
+    description: Desenvolvimento local
+  - url: https://api.openfinance.seubanco.com.br
+    description: Produção
+
+tags:
+  - name: Consentimentos
+    description: Gerenciamento de consentimentos Open Finance
+  - name: Contas
+    description: Dados de contas autorizadas
+  - name: Transações
+    description: Extrato de transações de contas autorizadas
+  - name: Cartões de Crédito
+    description: Dados de cartões de crédito (Fase 2)
+
+paths:
+  /open-finance/v1/consents:
+    post:
+      tags: [Consentimentos]
+      summary: Criar novo consentimento
+      operationId: criarConsentimento
+      security:
+        - OAuth2AuthServer:
+            - consent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentimentoRequest'
+      responses:
+        '201':
+          description: Consentimento criado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentimentoResponse'
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErroResponse'
+        '401':
+          description: Não autorizado
+
+  /open-finance/v1/consents/{consentId}:
+    get:
+      tags: [Consentimentos]
+      summary: Buscar consentimento por ID
+      operationId: buscarConsentimento
+      security:
+        - OAuth2AuthServer:
+            - consent
+      parameters:
+        - name: consentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Consentimento encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentimentoResponse'
+        '404':
+          description: Consentimento não encontrado
+
+  /open-finance/v1/consents/{consentId}/authorise:
+    post:
+      tags: [Consentimentos]
+      summary: Aprovar consentimento
+      operationId: aprovarConsentimento
+      security:
+        - OAuth2AuthServer:
+            - consent
+      parameters:
+        - name: consentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Consentimento aprovado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentimentoResponse'
+        '404':
+          description: Consentimento não encontrado
+
+  /open-finance/v1/consents/{consentId}/reject:
+    post:
+      tags: [Consentimentos]
+      summary: Rejeitar consentimento
+      operationId: rejeitarConsentimento
+      security:
+        - OAuth2AuthServer:
+            - consent
+      parameters:
+        - name: consentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: motivo
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Consentimento rejeitado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentimentoResponse'
+        '404':
+          description: Consentimento não encontrado
+
+  /open-finance/v1/consents/{consentId}/revoke:
+    post:
+      tags: [Consentimentos]
+      summary: Revogar consentimento
+      operationId: revogarConsentimento
+      security:
+        - OAuth2AuthServer:
+            - consent
+      parameters:
+        - name: consentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: motivo
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Consentimento revogado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentimentoResponse'
+        '404':
+          description: Consentimento não encontrado
+
+  /open-finance/v1/accounts:
+    get:
+      tags: [Contas]
+      summary: Listar contas autorizadas
+      operationId: listarContas
+      security:
+        - OAuth2AuthServer:
+            - accounts
+      parameters:
+        - name: X-Consent-Id
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de contas retornada com sucesso
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContaResponse'
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErroResponse'
+        '401':
+          description: Não autorizado
+
+  /open-finance/v1/accounts/{accountId}:
+    get:
+      tags: [Contas]
+      summary: Buscar conta por ID
+      operationId: buscarConta
+      security:
+        - OAuth2AuthServer:
+            - accounts
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Conta encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContaResponse'
+        '404':
+          description: Conta não encontrada
+
+  /open-finance/v1/accounts/{accountId}/balances:
+    get:
+      tags: [Contas]
+      summary: Obter saldo da conta autorizada
+      operationId: obterSaldoConta
+      security:
+        - OAuth2AuthServer:
+            - accounts
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: X-Consent-Id
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Saldo retornado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaldoResponse'
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErroResponse'
+        '401':
+          description: Não autorizado
+
+  /open-finance/v1/accounts/{accountId}/transactions:
+    get:
+      tags: [Transações]
+      summary: Listar transações da conta autorizada
+      operationId: listarTransacoes
+      security:
+        - OAuth2AuthServer:
+            - accounts
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: X-Consent-Id
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de transações retornada com sucesso
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransacaoResponse'
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErroResponse'
+        '401':
+          description: Não autorizado
+
+  /open-finance/v1/credit-cards:
+    get:
+      tags: [Cartões de Crédito]
+      summary: Listar cartões de crédito (Fase 2)
+      operationId: listarCartoesCredito
+      security:
+        - OAuth2AuthServer:
+            - credit-cards
+      responses:
+        '200':
+          description: Fase 2 - BACEN
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+        '401':
+          description: Não autorizado
+
+components:
+  securitySchemes:
+    OAuth2AuthServer:
+      type: oauth2
+      description: OAuth 2.0 Authorization Server (FAPI-Brazil)
+      flows:
+        authorizationCode:
+          authorizationUrl: https://auth.seubanco.com.br/oauth/authorize
+          tokenUrl: https://auth.seubanco.com.br/oauth/token
+          scopes:
+            consent: Gerenciar consentimentos
+            accounts: Acessar dados de contas
+            credit-cards: Acessar dados de cartões de crédito
+            transactions: Acessar transações
+
+  schemas:
+    ConsentimentoRequest:
+      type: object
+      required:
+        - clientId
+        - institutionCode
+      properties:
+        clientId:
+          type: string
+          description: ID do client Open Finance
+        institutionCode:
+          type: string
+          description: Código da instituição (ISPB)
+        permissions:
+          type: array
+          items:
+            type: string
+          description: Permissões solicitadas
+        expirationDays:
+          type: integer
+          description: Dias até expiração (máx 365)
+
+    ConsentimentoResponse:
+      type: object
+      properties:
+        consentId:
+          type: string
+        clientId:
+          type: string
+        status:
+          type: string
+          enum:
+            - AWAITING_AUTHORISATION
+            - AUTHORISED
+            - REJECTED
+            - REVOKED
+            - EXPIRED
+        permissions:
+          type: array
+          items:
+            type: string
+        dataCriacao:
+          type: string
+          format: date-time
+        dataExpiracao:
+          type: string
+          format: date-time
+        version:
+          type: integer
+
+    ContaResponse:
+      type: object
+      properties:
+        accountId:
+          type: string
+        institutionCode:
+          type: string
+        moeda:
+          type: string
+        tipoConta:
+          type: string
+          enum:
+            - CONTA_DE_PAGAMENTO
+            - CONTA_DE_DEPOSITO
+            - CONTA_POUPANCA
+            - CONTA_SALARIO
+        statusConta:
+          type: string
+        saldoDisponivel:
+          type: number
+        saldoAtual:
+          type: number
+        dataAtualizacao:
+          type: string
+          format: date-time
+
+    SaldoResponse:
+      type: object
+      properties:
+        accountId:
+          type: string
+        saldoDisponivel:
+          type: number
+        saldoAtual:
+          type: number
+        moeda:
+          type: string
+        dataAtualizacao:
+          type: string
+          format: date-time
+
+    TransacaoResponse:
+      type: object
+      properties:
+        transactionId:
+          type: string
+        tipoTransacao:
+          type: string
+          enum:
+            - CREDITO
+            - DEBITO
+        valor:
+          type: number
+        moeda:
+          type: string
+        estabelecimento:
+          type: string
+        descricao:
+          type: string
+        dataTransacao:
+          type: string
+          format: date-time
+        dataProcessamento:
+          type: string
+          format: date-time
+
+    ErroResponse:
+      type: object
+      properties:
+        erro:
+          type: string
+        mensagem:
+          type: string
+        codigoHttp:
+          type: integer

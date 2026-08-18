@@ -1,0 +1,35 @@
+# Build
+target/
+build/
+out/
+*.class
+*.jar
+*.war
+
+# IDE
+.idea/
+*.iml
+*.iws
+.settings/
+.classpath
+.project
+.vscode/
+*.swp
+*.swo
+
+# Maven
+.mvn/
+mvnw
+mvnw.cmd
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+*.env.local
+
+# Logs
+*.log
+logs/
