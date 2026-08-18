@@ -22,6 +22,8 @@ tags:
     description: Dados de contas autorizadas
   - name: Transações
     description: Extrato de transações de contas autorizadas
+  - name: Dados Pessoais
+    description: Dados de identificação, endereços e contatos (pessoa física e jurídica)
   - name: Cartões de Crédito
     description: Dados de cartões de crédito (Fase 2)
 
@@ -290,6 +292,220 @@ paths:
         '401':
           description: Não autorizado
 
+  /open-finance/v1/customers/personal/identifications:
+    get:
+      tags: [Dados Pessoais]
+      summary: Listar dados de identificação pessoal
+      operationId: listarIdentificacoesPessoais
+      security:
+        - OAuth2AuthServer:
+            - customers
+      parameters:
+        - name: X-Consent-Id
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de dados pessoais retornada com sucesso
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PessoaResponse'
+        '401':
+          description: Não autorizado
+
+  /open-finance/v1/customers/personal/identifications/{customerId}:
+    get:
+      tags: [Dados Pessoais]
+      summary: Buscar dados de identificação por customerId
+      operationId: buscarIdentificacaoPessoal
+      security:
+        - OAuth2AuthServer:
+            - customers
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: X-Consent-Id
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dados pessoais encontrados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PessoaResponse'
+        '404':
+          description: Pessoa não encontrada
+
+  /open-finance/v1/customers/personal/addresses:
+    get:
+      tags: [Dados Pessoais]
+      summary: Listar endereços pessoais
+      operationId: listarEnderecosPessoais
+      security:
+        - OAuth2AuthServer:
+            - customers
+      parameters:
+        - name: X-Consent-Id
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de endereços retornada com sucesso
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EnderecoResponse'
+        '401':
+          description: Não autorizado
+
+  /open-finance/v1/customers/personal/phone-numbers:
+    get:
+      tags: [Dados Pessoais]
+      summary: Listar telefones
+      operationId: listarTelefones
+      security:
+        - OAuth2AuthServer:
+            - customers
+      parameters:
+        - name: X-Consent-Id
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de contatos retornada com sucesso
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContatoResponse'
+        '401':
+          description: Não autorizado
+
+  /open-finance/v1/customers/personal/email:
+    get:
+      tags: [Dados Pessoais]
+      summary: Listar emails
+      operationId: listarEmails
+      security:
+        - OAuth2AuthServer:
+            - customers
+      parameters:
+        - name: X-Consent-Id
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de contatos retornada com sucesso
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContatoResponse'
+        '401':
+          description: Não autorizado
+
+  /open-finance/v1/customers/business/identifications:
+    get:
+      tags: [Dados Pessoais]
+      summary: Listar dados de identificação empresarial
+      operationId: listarIdentificacoesEmpresariais
+      security:
+        - OAuth2AuthServer:
+            - customers
+      parameters:
+        - name: X-Consent-Id
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de dados empresariais retornada com sucesso
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PessoaResponse'
+        '401':
+          description: Não autorizado
+
+  /open-finance/v1/customers/business/identifications/{customerId}:
+    get:
+      tags: [Dados Pessoais]
+      summary: Buscar dados empresariais por customerId
+      operationId: buscarIdentificacaoEmpresarial
+      security:
+        - OAuth2AuthServer:
+            - customers
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: X-Consent-Id
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dados empresariais encontrados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PessoaResponse'
+        '404':
+          description: Pessoa não encontrada
+
+  /open-finance/v1/customers/business/addresses:
+    get:
+      tags: [Dados Pessoais]
+      summary: Listar endereços empresariais
+      operationId: listarEnderecosEmpresariais
+      security:
+        - OAuth2AuthServer:
+            - customers
+      parameters:
+        - name: X-Consent-Id
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de endereços empresariais retornada com sucesso
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EnderecoResponse'
+        '401':
+          description: Não autorizado
+
   /open-finance/v1/credit-cards:
     get:
       tags: [Cartões de Crédito]
@@ -443,6 +659,50 @@ components:
         dataProcessamento:
           type: string
           format: date-time
+
+    PessoaResponse:
+      type: object
+      properties:
+        customerId:
+          type: string
+        tipoPessoa:
+          type: string
+          enum:
+            - FISICA
+            - JURIDICA
+        cpfCnpj:
+          type: string
+        nomeCompleto:
+          type: string
+        dataNascimento:
+          type: string
+          format: date
+        sexo:
+          type: string
+        nomeMae:
+          type: string
+
+    EnderecoResponse:
+      type: object
+      properties:
+        logradouro:
+          type: string
+        cidade:
+          type: string
+        estado:
+          type: string
+        cep:
+          type: string
+        pais:
+          type: string
+
+    ContatoResponse:
+      type: object
+      properties:
+        email:
+          type: string
+        telefone:
+          type: string
 
     ErroResponse:
       type: object

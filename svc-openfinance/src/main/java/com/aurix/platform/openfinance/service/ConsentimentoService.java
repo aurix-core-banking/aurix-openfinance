@@ -6,6 +6,7 @@ import com.aurix.platform.openfinance.entity.Consentimento;
 import com.aurix.platform.openfinance.repository.ConsentimentoRepository;
 import com.aurix.platform.openfinance.repository.ContaConsentidaRepository;
 import com.aurix.platform.openfinance.repository.TransacaoConsentidaRepository;
+import com.aurix.platform.openfinance.repository.PessoaConsentidaRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,16 +25,19 @@ public class ConsentimentoService {
     private final ConsentimentoRepository repository;
     private final ContaConsentidaRepository contaRepository;
     private final TransacaoConsentidaRepository transacaoRepository;
+    private final PessoaConsentidaRepository pessoaRepository;
 
     @Value("${aurix.openfinance.consent-max-duration-days:365}")
     private int maxDurationDays;
 
     public ConsentimentoService(ConsentimentoRepository repository,
                                 ContaConsentidaRepository contaRepository,
-                                TransacaoConsentidaRepository transacaoRepository) {
+                                TransacaoConsentidaRepository transacaoRepository,
+                                PessoaConsentidaRepository pessoaRepository) {
         this.repository = repository;
         this.contaRepository = contaRepository;
         this.transacaoRepository = transacaoRepository;
+        this.pessoaRepository = pessoaRepository;
     }
 
     public ConsentimentoResponse criar(ConsentimentoRequest request, Long userId) {
@@ -117,12 +121,15 @@ public class ConsentimentoService {
     private void limparDadosExpirados(String consentId) {
         long contas = contaRepository.findByConsentId(consentId).size();
         long transacoes = transacaoRepository.findByConsentId(consentId).size();
-        log.info("Limpando dados expirados: consentId={}, contas={}, transações={}",
-            consentId, contas, transacoes);
+        long pessoas = pessoaRepository.findByConsentId(consentId).size();
+        log.info("Limpando dados expirados: consentId={}, contas={}, transações={}, pessoas={}",
+            consentId, contas, transacoes, pessoas);
         transacaoRepository.findByConsentId(consentId)
             .forEach(t -> transacaoRepository.deleteById(t.getId()));
         contaRepository.findByConsentId(consentId)
             .forEach(c -> contaRepository.deleteById(c.getId()));
+        pessoaRepository.findByConsentId(consentId)
+            .forEach(p -> pessoaRepository.deleteById(p.getId()));
     }
 
     private ConsentimentoResponse toResponse(Consentimento c) {
