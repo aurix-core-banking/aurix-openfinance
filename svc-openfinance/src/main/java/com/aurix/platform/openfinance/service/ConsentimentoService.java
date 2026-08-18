@@ -4,9 +4,12 @@ import com.aurix.platform.openfinance.dto.ConsentimentoRequest;
 import com.aurix.platform.openfinance.dto.ConsentimentoResponse;
 import com.aurix.platform.openfinance.entity.Consentimento;
 import com.aurix.platform.openfinance.repository.ConsentimentoRepository;
+import com.aurix.platform.openfinance.repository.ContaConsentidaRepository;
+import com.aurix.platform.openfinance.repository.TransacaoConsentidaRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
@@ -19,12 +22,18 @@ public class ConsentimentoService {
 
     private static final Logger log = LoggerFactory.getLogger(ConsentimentoService.class);
     private final ConsentimentoRepository repository;
+    private final ContaConsentidaRepository contaRepository;
+    private final TransacaoConsentidaRepository transacaoRepository;
 
     @Value("${aurix.openfinance.consent-max-duration-days:365}")
     private int maxDurationDays;
 
-    public ConsentimentoService(ConsentimentoRepository repository) {
+    public ConsentimentoService(ConsentimentoRepository repository,
+                                ContaConsentidaRepository contaRepository,
+                                TransacaoConsentidaRepository transacaoRepository) {
         this.repository = repository;
+        this.contaRepository = contaRepository;
+        this.transacaoRepository = transacaoRepository;
     }
 
     public ConsentimentoResponse criar(ConsentimentoRequest request, Long userId) {
@@ -96,12 +105,24 @@ public class ConsentimentoService {
                 c.setStatus(Consentimento.StatusConsentimento.EXPIRED);
                 c.setVersion(c.getVersion() + 1);
                 repository.save(c);
+                limparDadosExpirados(c.getConsentId());
                 count++;
             }
         }
         if (count > 0) {
             log.info("Consentimentos expirados processados: {}", count);
         }
+    }
+
+    private void limparDadosExpirados(String consentId) {
+        long contas = contaRepository.findByConsentId(consentId).size();
+        long transacoes = transacaoRepository.findByConsentId(consentId).size();
+        log.info("Limpando dados expirados: consentId={}, contas={}, transações={}",
+            consentId, contas, transacoes);
+        transacaoRepository.findByConsentId(consentId)
+            .forEach(t -> transacaoRepository.deleteById(t.getId()));
+        contaRepository.findByConsentId(consentId)
+            .forEach(c -> contaRepository.deleteById(c.getId()));
     }
 
     private ConsentimentoResponse toResponse(Consentimento c) {
