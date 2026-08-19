@@ -1,0 +1,400 @@
+specVersion: "2.0"
+kind: Services
+
+metadata:
+  name: open-finance-services
+  description: Service ownership, interfaces, and responsibilities
+
+services:
+
+  consent-service:
+    ownership: openfinance-team
+    layer: consent-plane
+    port: 8092
+    database: aurix_db
+    schema: aurix
+    language: java-25
+    framework: spring-boot-4.1.0
+    healthCheck: /actuator/health
+    
+    responsibilities:
+      - Consent CRUD
+      - Permission management
+      - Expiration handling
+      - Version control
+    
+    interfaces:
+      rest:
+        basePath: /api/v1/consents
+        endpoints:
+          - method: POST
+            path: /
+            description: Create consent
+            auth: FAPI-Brazil
+          - method: GET
+            path: /{id}
+            description: Get consent
+            auth: FAPI-Brazil
+          - method: PUT
+            path: /{id}
+            description: Update consent
+            auth: FAPI-Brazil
+          - method: DELETE
+            path: /{id}
+            description: Revoke consent
+            auth: FAPI-Brazil
+          - method: POST
+            path: /{id}/authorize
+            description: Authorize consent
+            auth: FAPI-Brazil
+      
+      events:
+        publishes:
+          - consent.granted.v1
+          - consent.updated.v1
+          - consent.revoked.v1
+          - consent.expired.v1
+    
+    dependencies:
+      - postgresql (consent data)
+      - kafka (event publishing)
+      - fapi-auth-server (token validation)
+    
+    tests:
+      unit: ConsentimentoServiceTest
+      integration: ConsentimentoControllerTest
+      contract: ConsentServiceContractTest
+
+  resource-discovery:
+    ownership: openfinance-team
+    layer: consent-plane
+    port: 8092
+    database: aurix_db
+    schema: aurix
+    
+    responsibilities:
+      - Discover accessible resources from consent
+      - Build authorized resource graph
+      - Detect cycles in graph
+      - Topological sort
+    
+    interfaces:
+      rest:
+        basePath: /api/v1/resources
+        endpoints:
+          - method: POST
+            path: /discover
+            description: Discover resources from consent
+          - method: GET
+            path: /graph/{consentId}
+            description: Get resource graph
+          - method: GET
+            path: /graph/{consentId}/leaves
+            description: Get leaf nodes
+    
+    dependencies:
+      - consent-service (reads consent)
+      - postgresql (graph storage)
+
+  policy-engine:
+    ownership: openfinance-team
+    layer: consent-plane
+    port: 8092
+    database: aurix_db
+    schema: aurix
+    
+    responsibilities:
+      - Evaluate access requests
+      - Enforce architectural invariants
+      - Audit all decisions
+      - ONLY component that makes authorization decisions (INV-004)
+    
+    interfaces:
+      rest:
+        basePath: /api/v1/policy
+        endpoints:
+          - method: POST
+            path: /evaluate
+            description: Evaluate authorization
+          - method: GET
+            path: /rules
+            description: List policy rules
+          - method: POST
+            path: /rules
+            description: Create policy rule
+          - method: GET
+            path: /decisions
+            description: Audit trail
+    
+    dependencies:
+      - consent-service (reads consent)
+      - postgresql (rules + decisions)
+
+  authorized-context-service:
+    ownership: openfinance-team
+    layer: consent-plane
+    port: 8092
+    database: aurix_db
+    schema: aurix
+    
+    responsibilities:
+      - Create immutable authorized contexts
+      - Cryptographic signing
+      - Validate contexts
+      - Revoke contexts (never delete)
+    
+    interfaces:
+      rest:
+        basePath: /api/v1/contexts
+        endpoints:
+          - method: POST
+            path: /
+            description: Create context
+          - method: GET
+            path: /{id}
+            description: Get context
+          - method: POST
+            path: /{id}/validate
+            description: Validate context
+          - method: POST
+            path: /{id}/revoke
+            description: Revoke context
+
+  extraction-planner:
+    ownership: openfinance-team
+    layer: execution-plane
+    port: 8092
+    database: aurix_db
+    schema: aurix
+    
+    responsibilities:
+      - Build execution DAG from authorized resources
+      - Topological sort (Kahn's algorithm)
+      - Cycle detection (DFS)
+      - Assign idempotency keys
+      - Validate DAG completeness
+    
+    interfaces:
+      rest:
+        basePath: /api/v1/plans
+        endpoints:
+          - method: POST
+            path: /
+            description: Create execution plan
+          - method: GET
+            path: /{planId}
+            description: Get plan
+          - method: GET
+            path: /{planId}/status
+            description: Get status
+          - method: POST
+            path: /{planId}/cancel
+            description: Cancel plan
+
+  workflow-engine:
+    ownership: openfinance-team
+    layer: execution-plane
+    technology: temporal-1.26.0
+    
+    responsibilities:
+      - Durable execution orchestration
+      - Retry with exponential backoff
+      - Timeout management
+      - Parallel execution of independent nodes
+      - Cancellation handling
+      - Recovery from failures
+    
+    forbidden:
+      - Authorization decisions
+      - Consent decisions
+      - Regulatory policy interpretation
+      - Direct source system access
+    
+    workflows:
+      DataExtractionWorkflow:
+        input: ExecutionPlan
+        output: ExtractionResult
+        signals:
+          - cancelExtraction
+        queries:
+          - getStatus
+      
+      ConsentMonitoringWorkflow:
+        input: consentId
+        output: monitoring status
+        signals:
+          - consentUpdated
+          - consentRevoked
+
+  reconciliation:
+    ownership: openfinance-team
+    layer: execution-plane
+    port: 8092
+    database: aurix_db
+    schema: aurix
+    
+    responsibilities:
+      - Compare expected vs extracted counts
+      - Detect divergences
+      - Auto-repair missing records
+      - Generate reconciliation reports
+    
+    interfaces:
+      rest:
+        basePath: /api/v1/reconciliation
+        endpoints:
+          - method: GET
+            path: /{planId}/status
+            description: Get reconciliation status
+          - method: POST
+            path: /{planId}/repair
+            description: Trigger repair
+          - method: GET
+            path: /{planId}/report
+            description: Get report
+
+  data-pipeline:
+    ownership: openfinance-team
+    layer: data-plane
+    port: 8092
+    
+    responsibilities:
+      - Canonicalize raw data
+      - Validate against schemas
+      - Score data quality
+      - Classify PII
+      - Register lineage
+      - Publish data
+    
+    services:
+      canonicalization:
+        description: Convert raw to canonical Open Finance format
+      schema-validation:
+        description: Validate against Schema Registry
+      data-quality:
+        description: Score 0-100, threshold 80
+      pii-classification:
+        description: Detect and protect PII fields
+      lineage:
+        description: Register full lineage chain (INV-003)
+
+  extractors:
+    ownership: openfinance-team
+    layer: data-plane
+    
+    interface: DataExtractor
+    methods:
+      - extract(context: AuthorizedContext, resource: ResourceDescriptor): RawData
+      - validate(data: RawData): ValidationResult
+      - supports(resource: ResourceType): boolean
+    
+    implementations:
+      CoreAccountExtractor:
+        supports: [ACCOUNTS, BALANCES, TRANSACTIONS]
+        source: PostgreSQL
+      CoreCardExtractor:
+        supports: [CREDIT_CARDS, CREDIT_CARD_TRANSACTIONS, CREDIT_CARD_BILLS]
+        source: PostgreSQL
+      CorePixExtractor:
+        supports: [PIX_KEYS, PIX_TRANSACTIONS]
+        source: PostgreSQL
+      CoreLoanExtractor:
+        supports: [LOANS, LOAN_INSTALLMENTS]
+        source: PostgreSQL
+      CoreInvestmentExtractor:
+        supports: [INVESTMENTS, INVESTMENT_TRANSACTIONS]
+        source: PostgreSQL
+
+  data-products:
+    ownership: openfinance-team
+    layer: distribution-plane
+    port: 8092
+    
+    responsibilities:
+      - Materialize data products
+      - Serve via REST/GraphQL
+      - Manage product lifecycle
+    
+    interfaces:
+      rest:
+        basePath: /api/v1/products
+        endpoints:
+          - method: POST
+            path: /
+            description: Create data product
+          - method: GET
+            path: /
+            description: List products
+          - method: GET
+            path: /{id}
+            description: Serve product data
+
+  subscriptions:
+    ownership: openfinance-team
+    layer: distribution-plane
+    port: 8092
+    
+    responsibilities:
+      - Manage webhook subscriptions
+      - Notify on data changes
+      - Retry failed deliveries
+    
+    interfaces:
+      rest:
+        basePath: /api/v1/subscriptions
+        endpoints:
+          - method: POST
+            path: /
+            description: Create subscription
+          - method: GET
+            path: /
+            description: List subscriptions
+          - method: DELETE
+            path: /{id}
+            description: Cancel subscription
+
+relationships:
+  - from: consent-service
+    to: resource-discovery
+    type: provides-consent
+    contract: consent.granted.v1
+
+  - from: resource-discovery
+    to: policy-engine
+    type: provides-authorized-resources
+    contract: AuthorizedResourceGraph
+
+  - from: policy-engine
+    to: authorized-context-service
+    type: provides-authorization-decision
+    contract: PolicyDecisionResponse
+
+  - from: authorized-context-service
+    to: extraction-planner
+    type: provides-authorized-context
+    contract: AuthorizedContext
+
+  - from: extraction-planner
+    to: workflow-engine
+    type: provides-execution-plan
+    contract: ExecutionPlan
+
+  - from: workflow-engine
+    to: data-pipeline
+    type: orchestrates
+    contract: DataExtractionWorkflow
+
+  - from: data-pipeline
+    to: extractors
+    type: delegates-extraction
+    contract: DataExtractor
+
+  - from: data-pipeline
+    to: reconciliation
+    type: triggers-reconciliation
+    contract: ReconciliationRequest
+
+  - from: data-pipeline
+    to: data-products
+    type: publishes-to
+    contract: PublishedData

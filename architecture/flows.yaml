@@ -1,0 +1,226 @@
+specVersion: "2.0"
+kind: Flows
+
+metadata:
+  name: open-finance-flows
+  description: Executable workflows and DAGs
+
+flows:
+
+  - id: consent-to-execution
+    description: "Fluxo completo: consentimento → execução"
+    trigger:
+      event: consent.granted.v1
+    steps:
+      - id: resolve-consent
+        component: consent-service
+        input:
+          consentId: "${trigger.consentId}"
+        output: consent
+        description: "Busca consentimento validado"
+
+      - id: discover-resources
+        component: resource-discovery
+        input:
+          consentId: "${consent.id}"
+          permissions: "${consent.permissions}"
+        output: resources
+        description: "Descobre recursos acessíveis"
+
+      - id: authorize
+        component: policy-engine
+        input:
+          consent: "${consent}"
+          resources: "${resources}"
+          purpose: "${consent.purpose}"
+        output: authorizedContext
+        description: "Avalia política e gera contexto autorizado"
+        validation:
+          - "AUTHORIZED_CONTEXT_CREATED == true"
+
+      - id: create-plan
+        component: extraction-planner
+        input:
+          authorizedContext: "${authorizedContext}"
+          resourceGraph: "${resources.graph}"
+        output: executionPlan
+        description: "Gera plano DAG de extração"
+
+      - id: execute
+        component: workflow-engine
+        workflow: DataExtractionWorkflow
+        input:
+          executionPlan: "${executionPlan}"
+        description: "Executa workflow durável via Temporal"
+
+      - id: reconcile
+        component: reconciliation
+        input:
+          executionId: "${executionPlan.planId}"
+        description: "Reconciliação pós-execução"
+
+  - id: credit-card-data-sharing
+    description: "Compartilhamento de dados de cartão de crédito"
+    trigger:
+      flow: consent-to-execution
+      condition: "consent.permissions contains CREDIT_CARDS"
+    
+    executionPlan:
+      nodes:
+        - id: card-account
+          capability: CREDIT_CARD_ACCOUNT
+          dependsOn: []
+          extractor: CoreCardExtractor
+          source: PostgreSQL
+          timeout: 5000
+          retryPolicy:
+            maxAttempts: 3
+            backoffMultiplier: 2
+
+        - id: card-bills
+          capability: CREDIT_CARD_BILLS
+          dependsOn:
+            - card-account
+          extractor: CoreCardExtractor
+          source: PostgreSQL
+          timeout: 5000
+
+        - id: card-transactions
+          capability: CREDIT_CARD_TRANSACTIONS
+          dependsOn:
+            - card-account
+          extractor: CoreCardExtractor
+          source: PostgreSQL
+          timeout: 10000
+
+        - id: publish
+          capability: PUBLICATION
+          dependsOn:
+            - card-bills
+            - card-transactions
+
+      dag: |
+        Card Account
+            │
+        ┌───┴───┐
+        ▼       ▼
+      Bills   Transactions
+        │       │
+        └───┬───┘
+            ▼
+         Publish
+
+  - id: account-data-sharing
+    description: "Compartilhamento de dados de conta"
+    trigger:
+      flow: consent-to-execution
+      condition: "consent.permissions contains ACCOUNTS"
+    
+    executionPlan:
+      nodes:
+        - id: account-balances
+          capability: ACCOUNT_BALANCES
+          dependsOn: []
+          extractor: CoreAccountExtractor
+
+        - id: account-transactions
+          capability: ACCOUNT_TRANSACTIONS
+          dependsOn: []
+          extractor: CoreAccountExtractor
+
+        - id: publish
+          capability: PUBLICATION
+          dependsOn:
+            - account-balances
+            - account-transactions
+
+      dag: |
+        Balances ──┐
+                   ├── Publish
+        Transactions ─┘
+
+  - id: loan-data-sharing
+    description: "Compartilhamento de dados de empréstimo"
+    trigger:
+      flow: consent-to-execution
+      condition: "consent.permissions contains LOANS"
+    
+    executionPlan:
+      nodes:
+        - id: loan-contracts
+          capability: LOAN_CONTRACTS
+          dependsOn: []
+          extractor: CoreLoanExtractor
+
+        - id: loan-installments
+          capability: LOAN_INSTALLMENTS
+          dependsOn:
+            - loan-contracts
+
+        - id: publish
+          capability: PUBLICATION
+          dependsOn:
+            - loan-installments
+
+      dag: |
+        Contracts
+            │
+        Installments
+            │
+          Publish
+
+  - id: investment-data-sharing
+    description: "Compartilhamento de dados de investimento"
+    trigger:
+      flow: consent-to-execution
+      condition: "consent.permissions contains INVESTMENTS"
+    
+    executionPlan:
+      nodes:
+        - id: investment-positions
+          capability: INVESTMENT_POSITIONS
+          dependsOn: []
+          extractor: CoreInvestmentExtractor
+
+        - id: investment-transactions
+          capability: INVESTMENT_TRANSACTIONS
+          dependsOn:
+            - investment-positions
+
+        - id: publish
+          capability: PUBLICATION
+          dependsOn:
+            - investment-transactions
+
+      dag: |
+        Positions
+            │
+        Transactions
+            │
+          Publish
+
+  - id: consent-revocation
+    description: "Revogação de consentimento"
+    trigger:
+      event: consent.revoked.v1
+    steps:
+      - id: stop-workflows
+        component: workflow-engine
+        action: cancelAllWorkflows
+        input:
+          consentId: "${trigger.consentId}"
+        description: "Cancela todos os workflows afetados"
+
+      - id: revoke-contexts
+        component: authorized-context-service
+        action: revokeAllByConsent
+        input:
+          consentId: "${trigger.consentId}"
+        description: "Revoga todos os contextos autorizados"
+
+      - id: block-access
+        component: policy-engine
+        action: denyAll
+        input:
+          consentId: "${trigger.consentId}"
+        description: "Bloqueia todos os acessos futuros"

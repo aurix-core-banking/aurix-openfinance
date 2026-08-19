@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aurix-core-banking.github.io/aurix-openfinance/schemas/events.schema.json",
+  "title": "Events Spec",
+  "type": "object",
+  "required": ["specVersion", "kind", "metadata", "namingConvention", "events"],
+  "properties": {
+    "specVersion": { "type": "string" },
+    "kind": { "type": "string", "enum": ["Events"] },
+    "metadata": { "type": "object", "required": ["name"] },
+    "namingConvention": {
+      "type": "object",
+      "required": ["pattern"],
+      "properties": {
+        "pattern": { "type": "string" },
+        "examples": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "events": { "type": "object" }
+  }
+}

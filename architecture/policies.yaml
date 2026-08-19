@@ -1,0 +1,169 @@
+specVersion: "2.0"
+kind: Policies
+
+metadata:
+  name: open-finance-policies
+  description: Architectural invariants, rules, and compliance policies
+
+invariants:
+  - id: INV-001
+    rule: NO_CONSENT_NO_EXECUTION
+    severity: critical
+    enforcement: runtime
+    description: "No pipeline may execute without a valid, active consent"
+    violation: "Pipeline MUST fail with CONSENT_REQUIRED error"
+    test: "ArchitectureTest.testNoConsentNoExecution()"
+
+  - id: INV-002
+    rule: NO_AUTHORIZED_RESOURCE_NO_ACCESS
+    severity: critical
+    enforcement: runtime
+    description: "Extractor only accesses explicitly authorized resources"
+    violation: "Extractor MUST reject with UNAUTHORIZED_RESOURCE error"
+    test: "ArchitectureTest.testNoAuthorizedResourceNoAccess()"
+
+  - id: INV-003
+    rule: NO_LINEAGE_NO_PUBLICATION
+    severity: critical
+    enforcement: runtime
+    description: "Data without lineage traceability cannot be published"
+    violation: "Pipeline MUST fail at publish stage with LINEAGE_REQUIRED error"
+    test: "ArchitectureTest.testNoLineageNoPublication()"
+
+  - id: INV-004
+    rule: TEMPORAL_MUST_NOT_AUTHORIZE
+    severity: critical
+    enforcement: architecture-test
+    description: "Temporal engine MUST NOT contain authorization or regulatory business rules"
+    violation: "Architecture test FAIL if Temporal activity contains authorization logic"
+    test: "ArchitectureTest.testTemporalDoesNotAuthorize()"
+
+  - id: INV-005
+    rule: IMMUTABLE_AUTHORIZED_CONTEXT
+    severity: critical
+    enforcement: runtime
+    description: "Authorized context is immutable during execution"
+    violation: "Runtime MUST reject mutation attempts"
+    test: "ArchitectureTest.testImmutableAuthorizedContext()"
+
+  - id: INV-006
+    rule: CONSENT_VERSIONING
+    severity: high
+    enforcement: runtime
+    description: "Consent changes create new version, never mutate existing"
+    violation: "System MUST reject mutation of existing consent"
+    test: "ArchitectureTest.testConsentVersioning()"
+
+  - id: INV-007
+    rule: SCHEMA_BACKWARD_COMPATIBLE
+    severity: high
+    enforcement: ci
+    description: "New schemas must be backward-compatible"
+    violation: "CI MUST fail on breaking schema change"
+    test: "SchemaCompatibilityTest.testBackwardCompatible()"
+
+policyRules:
+
+  consentValidation:
+    - code: CONSENT-001
+      rule: "Consent status must be ACTIVE"
+      severity: critical
+      action: DENY
+
+    - code: CONSENT-002
+      rule: "Consent must not be expired"
+      severity: critical
+      action: DENY
+
+    - code: CONSENT-003
+      rule: "Consent must not be revoked"
+      severity: critical
+      action: DENY
+
+    - code: CONSENT-004
+      rule: "Consent version must match authorized context version"
+      severity: critical
+      action: DENY
+
+  resourceAccess:
+    - code: RESOURCE-001
+      rule: "Resource must be in authorized resource graph"
+      severity: critical
+      action: DENY
+
+    - code: RESOURCE-002
+      rule: "Permission must cover resource type"
+      severity: critical
+      action: DENY
+
+    - code: RESOURCE-003
+      rule: "Resource must be accessible within time window"
+      severity: high
+      action: DENY
+
+  tokenValidation:
+    - code: TOKEN-001
+      rule: "Token must be valid and not expired"
+      severity: critical
+      action: DENY
+
+    - code: TOKEN-002
+      rule: "DPoP thumbprint must match"
+      severity: critical
+      action: DENY
+
+    - code: TOKEN-003
+      rule: "Token issuer must be trusted"
+      severity: critical
+      action: DENY
+
+  rateLimiting:
+    - code: RATE-001
+      rule: "Max 100 requests per participant per minute"
+      severity: high
+      action: THROTTLE
+
+    - code: RATE-002
+      rule: "Max 10 concurrent extractions per consent"
+      severity: medium
+      action: THROTTLE
+
+  timeConstraints:
+    - code: TIME-001
+      rule: "Extraction must complete within timeout"
+      severity: high
+      action: CANCEL
+
+    - code: TIME-002
+      rule: "Authorized context validity must not be exceeded"
+      severity: critical
+      action: DENY
+
+compliance:
+  bacen:
+    regulation: "COMEX 35.145"
+    requirements:
+      - explicit-consent
+      - purpose-limitation
+      - data-minimization
+      - consent-versioning
+      - audit-trail
+      - right-to-revoke
+
+  lgpd:
+    regulation: "Lei 13.709/2018"
+    requirements:
+      - consent-based-processing
+      - data-subject-rights
+      - data-protection-officer
+      - impact-assessment
+      - breach-notification
+
+  fapi:
+    profile: "FAPI-Brazil Security Profile 2.0"
+    requirements:
+      - sender-constrained-tokens
+      - mTLS
+      - DPoP
+      - PAR (Pushed Authorization Requests)
+      - JARM (JWT Secured Authorization Response Mode)

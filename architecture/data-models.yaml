@@ -1,0 +1,303 @@
+specVersion: "2.0"
+kind: DataModels
+
+metadata:
+  name: open-finance-data-models
+  description: Canonical data models for Open Finance
+
+canonicalModels:
+
+  account:
+    name: CanonicalAccount
+    fields:
+      - name: accountId
+        type: string
+        required: true
+        pii: false
+      - name: documentNumber
+        type: string
+        required: true
+        pii: true
+        protection: hash
+      - name: accountType
+        type: enum
+        values: [CONTA_CORRENTE, POUPANCA, SALARIO]
+        required: true
+      - name: agency
+        type: string
+        required: true
+      - name: number
+        type: string
+        required: true
+        pii: true
+        protection: mask
+      - name: status
+        type: enum
+        values: [ATIVA, INATIVA, BLOQUEADA]
+        required: true
+      - name: createdAt
+        type: datetime
+        required: true
+
+  balance:
+    name: CanonicalBalance
+    fields:
+      - name: balanceId
+        type: string
+        required: true
+      - name: accountId
+        type: string
+        required: true
+      - name: available
+        type: decimal
+        required: true
+      - name: blocked
+        type: decimal
+        required: true
+      - name: updateTimestamp
+        type: datetime
+        required: true
+
+  transaction:
+    name: CanonicalTransaction
+    fields:
+      - name: transactionId
+        type: string
+        required: true
+      - name: accountId
+        type: string
+        required: true
+      - name: type
+        type: enum
+        values: [CREDITO, DEBITO]
+        required: true
+      - name: amount
+        type: decimal
+        required: true
+      - name: description
+        type: string
+        required: false
+      - name: merchantCategoryCode
+        type: string
+        required: false
+      - name: timestamp
+        type: datetime
+        required: true
+
+  creditCard:
+    name: CanonicalCreditCard
+    fields:
+      - name: cardId
+        type: string
+        required: true
+      - name: documentNumber
+        type: string
+        required: true
+        pii: true
+        protection: hash
+      - name: brand
+        type: enum
+        values: [MASTERCARD, VISA, ELO, AMEX]
+        required: true
+      - name: cardNumber
+        type: string
+        required: true
+        pii: true
+        protection: mask
+      - name: status
+        type: enum
+        values: [ATIVO, BLOQUEADO, CANCELADO]
+        required: true
+      - name: creditLimit
+        type: decimal
+        required: true
+      - name: availableLimit
+        type: decimal
+        required: true
+
+  creditCardTransaction:
+    name: CanonicalCreditCardTransaction
+    fields:
+      - name: transactionId
+        type: string
+        required: true
+      - name: cardId
+        type: string
+        required: true
+      - name: amount
+        type: decimal
+        required: true
+      - name: merchantName
+        type: string
+        required: false
+      - name: merchantCategoryCode
+        type: string
+        required: false
+      - name: timestamp
+        type: datetime
+        required: true
+      - name: installmentNumber
+        type: integer
+        required: false
+
+  creditCardBill:
+    name: CanonicalCreditCardBill
+    fields:
+      - name: billId
+        type: string
+        required: true
+      - name: cardId
+        type: string
+        required: true
+      - name: referenceDate
+        type: date
+        required: true
+      - name: dueDate
+        type: date
+        required: true
+      - name: totalAmount
+        type: decimal
+        required: true
+      - name: paidAmount
+        type: decimal
+        required: true
+      - name: status
+        type: enum
+        values: [ABERTA, PAGA, VENCIDA, PARCIAL]
+        required: true
+
+  pix:
+    name: CanonicalPix
+    fields:
+      - name: pixId
+        type: string
+        required: true
+      - name: endToEndId
+        type: string
+        required: true
+      - name: payerAccountId
+        type: string
+        required: true
+      - name: payeeAccountId
+        type: string
+        required: true
+      - name: amount
+        type: decimal
+        required: true
+      - name: status
+        type: enum
+        values: [PENDENTE, LIQUIDADO, DEVOLVIDO]
+        required: true
+      - name: timestamp
+        type: datetime
+        required: true
+
+  loan:
+    name: CanonicalLoan
+    fields:
+      - name: loanId
+        type: string
+        required: true
+      - name: documentNumber
+        type: string
+        required: true
+        pii: true
+        protection: hash
+      - name: type
+        type: enum
+        values: [CONSIGNADO, PESSOAL, FINANCIAMENTO]
+        required: true
+      - name: principalAmount
+        type: decimal
+        required: true
+      - name: interestRate
+        type: decimal
+        required: true
+      - name: termMonths
+        type: integer
+        required: true
+      - name: status
+        type: enum
+        values: [ATIVO, QUITADO, ATRASADO]
+        required: true
+
+  loanInstallment:
+    name: CanonicalLoanInstallment
+    fields:
+      - name: installmentId
+        type: string
+        required: true
+      - name: loanId
+        type: string
+        required: true
+      - name: number
+        type: integer
+        required: true
+      - name: amount
+        type: decimal
+        required: true
+      - name: dueDate
+        type: date
+        required: true
+      - name: status
+        type: enum
+        values: [PENDENTE, PAGA, ATRASADA]
+        required: true
+
+  investment:
+    name: CanonicalInvestment
+    fields:
+      - name: investmentId
+        type: string
+        required: true
+      - name: documentNumber
+        type: string
+        required: true
+        pii: true
+        protection: hash
+      - name: type
+        type: enum
+        values: [CDB, LCI, LCA, FUNDO, TESOURO]
+        required: true
+      - name: currentValue
+        type: decimal
+        required: true
+      - name: appliedAmount
+        type: decimal
+        required: true
+      - name: status
+        type: enum
+        values: [ATIVO, RESGATADO, VENCIDO]
+        required: true
+
+piiTreatment:
+  detection:
+    methods:
+      - regex:
+          CPF: "\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}"
+          CNPJ: "\\d{2}\\.?\\d{3}\\.?\\d{3}/?\\d{4}-?\\d{2}"
+          EMAIL: "[\\w.-]+@[\\w.-]+\\.\\w+"
+          PHONE: "\\(?\\d{2}\\)?\\s?\\d{4,5}-?\\d{4}"
+      - schema:
+          fieldNames: [documentNumber, email, phone, address]
+
+  protection:
+    strategies:
+      mask:
+        description: "Partial masking (CPF: ***)***.***-**)"
+        applicable: [CPF, CNPJ, ACCOUNT_NUMBER]
+      hash:
+        description: "SHA-256 one-way hash"
+        applicable: [EMAIL, PHONE]
+      encrypt:
+        description: "AES-256-GCM reversible encryption"
+        applicable: [ADDRESS, FULL_NAME]
+      tokenize:
+        description: "Replace with token, vault stores mapping"
+        applicable: [PIX_KEY, CARD_NUMBER]
+
+  sensitivityLevels:
+    PUBLIC: []
+    INTERNAL: [ACCOUNT_NUMBER, AGENCY]
+    CONFIDENTIAL: [CPF, CNPJ, EMAIL]
+    RESTRICTED: [CARD_NUMBER, PIX_KEY, FULL_NAME, ADDRESS]

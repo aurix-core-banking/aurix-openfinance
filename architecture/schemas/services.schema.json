@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aurix-core-banking.github.io/aurix-openfinance/schemas/services.schema.json",
+  "title": "Services Spec",
+  "type": "object",
+  "required": ["specVersion", "kind", "metadata", "services", "relationships"],
+  "properties": {
+    "specVersion": { "type": "string" },
+    "kind": { "type": "string", "enum": ["Services"] },
+    "metadata": { "type": "object", "required": ["name"] },
+    "services": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["ownership", "responsibilities"],
+        "properties": {
+          "ownership": { "type": "string" },
+          "layer": { "type": "string" },
+          "port": { "type": "integer" },
+          "database": { "type": "string" },
+          "responsibilities": { "type": "array", "items": { "type": "string" } },
+          "interfaces": { "type": "object" },
+          "dependencies": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "relationships": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from", "to", "type"],
+        "properties": {
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "type": { "type": "string" },
+          "contract": { "type": "string" }
+        }
+      }
+    }
+  }
+}

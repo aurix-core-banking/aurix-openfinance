@@ -1,0 +1,230 @@
+specVersion: "2.0"
+kind: Infrastructure
+
+metadata:
+  name: open-finance-infrastructure
+  description: Runtime and deployment infrastructure
+
+runtime:
+
+  services:
+    svc-openfinance:
+      port: 8092
+      healthCheck: /actuator/health
+      replicas: 3
+      resources:
+        cpu: "500m-1000m"
+        memory: "512Mi-1Gi"
+      env:
+        - SPRING_PROFILES_ACTIVE
+        - DATABASE_URL
+        - KAFKA_BROKERS
+        - TEMPORAL_HOST
+        - VAULT_ADDR
+
+  temporal:
+    version: "1.26.0"
+    image: temporalio/auto-setup:1.26.0
+    ports:
+      - "7233:7233"
+    ui:
+      image: temporalio/ui:2.21.0
+      port: "8081"
+    taskQueues:
+      - openfinance-extraction
+      - openfinance-reconciliation
+    worker:
+      taskQueue: openfinance-extraction
+      maxConcurrentActivity: 100
+      maxConcurrentWorkflow: 50
+
+  databases:
+    postgresql:
+      version: "15"
+      port: 5432
+      database: aurix_db
+      schema: aurix
+      features:
+        - connection-pooling
+        - read-replicas
+        - wal-archiving
+        - point-in-time-recovery
+      tables:
+        - consentimentos
+        - policy_rules
+        - policy_decisions
+        - authorized_contexts
+        - resource_nodes
+        - resource_graphs
+        - resource_edges
+        - execution_plans
+        - plan_nodes
+        - plan_edges
+        - reconciliation_records
+        - raw_records
+        - canonical_records
+        - validation_results
+        - quality_results
+        - pii_classifications
+        - lineage_records
+        - data_products
+        - subscriptions
+
+    clickhouse:
+      version: "24.3"
+      port: 8123
+      purpose: analytics, data-products
+
+    timescaledb:
+      version: "2.14"
+      port: 5433
+      purpose: time-series metrics
+
+  messaging:
+    kafka:
+      version: "3.7"
+      port: 9092
+      topics:
+        pattern: "{domain}.{entity}.{action}.{version}"
+        retention: 5y
+      schemaRegistry:
+        enabled: true
+        port: 8081
+        compatibility: BACKWARD
+
+  cache:
+    redis:
+      version: "7"
+      port: 6379
+      purpose: session, rate-limiting, circuit-breaker state
+
+  search:
+    elasticsearch:
+      version: "8.12"
+      port: 9200
+      purpose: logging, audit trail search
+
+  objectStorage:
+    minio:
+      ports: [9000, 9001]
+      buckets:
+        - openfinance-raw
+        - openfinance-canonical
+        - openfinance-published
+        - openfinance-backups
+      lifecycle:
+        standard: 30d
+        ia: 90d
+        glacier: 1y
+        delete: 5y
+
+  secrets:
+    vault:
+      version: "1.15"
+      port: 8200
+      engine: kv-v2
+      paths:
+        - openfinance/database
+        - openfinance/kafka
+        - openfinance/temporal
+        - openfinance/tokens
+
+  monitoring:
+    prometheus:
+      port: 9090
+      scrapeInterval: 15s
+    grafana:
+      port: 3000
+      dashboards:
+        - openfinance-overview
+        - openfinance-pipelines
+        - openfinance-consent
+        - temporal-workflows
+    jaeger:
+      port: 16686
+      protocol: OTLP
+    alertmanager:
+      port: 9093
+      routes:
+        - severity: critical
+          channel: pager
+        - severity: high
+          channel: slack
+
+  gateway:
+    traefik:
+      port: 8080
+      dashboard: 8081
+      tls: true
+      providers:
+        - docker
+        - file
+
+  serviceMesh:
+    istio:
+      version: "1.21"
+      features:
+        - mtls-strict
+        - authorization-policies
+        - circuit-breaker
+        - rate-limiting
+        - canary-deployment
+
+deployment:
+
+  strategy:
+    type: rolling-update
+    maxSurge: 1
+    maxUnavailable: 0
+
+  environments:
+    development:
+      profile: dev
+      replicas: 1
+      temporal:
+        standalone: true
+
+    staging:
+      profile: staging
+      replicas: 2
+      temporal:
+        cluster: true
+
+    production:
+      profile: prod
+      replicas: 3
+      temporal:
+        cluster: true
+        historyService: 3
+        matchingService: 3
+
+  ci:
+    pipeline: github-actions
+    stages:
+      - compile
+      - unit-test
+      - architecture-test
+      - integration-test
+      - contract-test
+      - security-scan
+      - build-image
+      - deploy-staging
+      - e2e-test
+      - deploy-production
+
+  helm:
+    charts:
+      - svc-openfinance
+      - temporal
+      - istio-security
+    values:
+      production:
+        replicas: 3
+        resources:
+          cpu: "500m-1000m"
+          memory: "512Mi-1Gi"
+        autoscaling:
+          enabled: true
+          minReplicas: 3
+          maxReplicas: 10
+          targetCPU: 70

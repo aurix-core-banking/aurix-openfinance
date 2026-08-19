@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aurix-core-banking.github.io/aurix-openfinance/schemas/flows.schema.json",
+  "title": "Flows Spec",
+  "type": "object",
+  "required": ["specVersion", "kind", "metadata", "flows"],
+  "properties": {
+    "specVersion": { "type": "string" },
+    "kind": { "type": "string", "enum": ["Flows"] },
+    "metadata": { "type": "object", "required": ["name"] },
+    "flows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "trigger", "steps"],
+        "properties": {
+          "id": { "type": "string" },
+          "description": { "type": "string" },
+          "trigger": {
+            "type": "object",
+            "properties": {
+              "event": { "type": "string" },
+              "flow": { "type": "string" },
+              "condition": { "type": "string" }
+            }
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "component", "description"],
+              "properties": {
+                "id": { "type": "string" },
+                "component": { "type": "string" },
+                "input": { "type": "object" },
+                "output": { "type": "string" },
+                "description": { "type": "string" },
+                "validation": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          },
+          "executionPlan": { "type": "object" }
+        }
+      }
+    }
+  }
+}

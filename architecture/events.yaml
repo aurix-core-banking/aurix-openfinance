@@ -1,0 +1,190 @@
+specVersion: "2.0"
+kind: Events
+
+metadata:
+  name: open-finance-events
+  description: Event catalog for Open Finance data exchange
+
+namingConvention:
+  pattern: "{domain}.{entity}.{action}.{version}"
+  examples:
+    - consent.granted.v1
+    - credit-card.transaction.extracted.v1
+    - account.balance.published.v1
+
+requiredMetadata:
+  - eventId
+  - eventType
+  - timestamp
+  - correlationId
+  - causationId
+  - consentId
+  - executionId
+  - schemaVersion
+
+events:
+
+  consent:
+    - id: consent.granted.v1
+      description: "Novo consentimento criado e autorizado"
+      trigger: "Cliente autoriza compartilhamento de dados"
+      producer: consent-service
+      consumers:
+        - resource-discovery
+        - workflow-engine
+      schema: ConsentGrantedEvent
+      retention: 5y
+
+    - id: consent.updated.v1
+      description: "Consentimento atualizado (permissões, expiração)"
+      trigger: "Cliente ou_participante atualiza consentimento"
+      producer: consent-service
+      consumers:
+        - resource-discovery
+        - extraction-planner
+      schema: ConsentUpdatedEvent
+      retention: 5y
+
+    - id: consent.revoked.v1
+      description: "Consentimento revogado"
+      trigger: "Cliente revoga consentimento"
+      producer: consent-service
+      consumers:
+        - workflow-engine (cancel workflows)
+        - authorized-context-service (revoke contexts)
+        - policy-engine (block access)
+      schema: ConsentRevokedEvent
+      retention: 5y
+
+    - id: consent.expired.v1
+      description: "Consentimento expirado"
+      trigger: "Scheduler detecta expiração"
+      producer: consent-service
+      consumers:
+        - workflow-engine
+        - authorized-context-service
+      schema: ConsentExpiredEvent
+      retention: 5y
+
+  extraction:
+    - id: data.extracted.v1
+      description: "Dados extraídos com sucesso do sistema legado"
+      trigger: "ExtractDataActivity completa"
+      producer: workflow-engine
+      consumers:
+        - data-pipeline
+      schema: DataExtractedEvent
+      retention: 5y
+
+    - id: data.transformed.v1
+      description: "Dados canonicalizados"
+      trigger: "CanonicalizationService completa"
+      producer: data-pipeline
+      consumers:
+        - schema-validation
+      schema: DataTransformedEvent
+      retention: 5y
+
+    - id: data.validated.v1
+      description: "Dados validados contra schema"
+      trigger: "SchemaValidationService completa"
+      producer: data-pipeline
+      consumers:
+        - data-quality
+      schema: DataValidatedEvent
+      retention: 5y
+
+    - id: data.quality-checked.v1
+      description: "Dados verificados para qualidade"
+      trigger: "DataQualityService completa"
+      producer: data-pipeline
+      consumers:
+        - pii-classification
+      schema: DataQualityCheckedEvent
+      retention: 5y
+
+    - id: data.classified.v1
+      description: "PII classificado e protegido"
+      trigger: "PiiClassificationService completa"
+      producer: data-pipeline
+      consumers:
+        - lineage-service
+      schema: DataClassifiedEvent
+      retention: 5y
+
+    - id: data.lineage-registered.v1
+      description: "Linhagem registrada (INV-003)"
+      trigger: "LineageService registra cadeia completa"
+      producer: data-pipeline
+      consumers:
+        - publication-service
+      schema: DataLineageRegisteredEvent
+      retention: 5y
+
+    - id: data.published.v1
+      description: "Dados publicados para consumidores autorizados"
+      trigger: "Publicação completa"
+      producer: data-pipeline
+      consumers:
+        - data-products
+        - subscriptions
+      schema: DataPublishedEvent
+      retention: 5y
+
+  pipeline:
+    - id: pipeline.started.v1
+      description: "Pipeline de extração iniciado"
+      producer: workflow-engine
+      schema: PipelineStartedEvent
+
+    - id: pipeline.completed.v1
+      description: "Pipeline concluído com sucesso"
+      producer: workflow-engine
+      schema: PipelineCompletedEvent
+
+    - id: pipeline.failed.v1
+      description: "Pipeline falhou"
+      producer: workflow-engine
+      schema: PipelineFailedEvent
+
+    - id: pipeline.partial.v1
+      description: "Pipeline completou parcialmente"
+      producer: workflow-engine
+      schema: PipelinePartialEvent
+
+  reconciliation:
+    - id: reconciliation.triggered.v1
+      description: "Reconciliação iniciada"
+      producer: reconciliation
+      schema: ReconciliationTriggeredEvent
+
+    - id: reconciliation.divergence-detected.v1
+      description: "Divergência detectada entre esperado e extraído"
+      producer: reconciliation
+      schema: ReconciliationDivergenceEvent
+
+    - id: reconciliation.repaired.v1
+      description: "Divergência reparada"
+      producer: reconciliation
+      schema: ReconciliationRepairedEvent
+
+  system:
+    - id: circuit-breaker.tripped.v1
+      description: "Circuit breaker abriu (sistema legado indisponível)"
+      producer: infrastructure
+      schema: CircuitBreakerTrippedEvent
+
+    - id: rate-limit.exceeded.v1
+      description: "Rate limit excedido"
+      producer: infrastructure
+      schema: RateLimitExceededEvent
+
+    - id: workflow.failed.v1
+      description: "Temporal workflow falhou"
+      producer: workflow-engine
+      schema: WorkflowFailedEvent
+
+    - id: workflow.cancelled.v1
+      description: "Temporal workflow cancelado"
+      producer: workflow-engine
+      schema: WorkflowCancelledEvent

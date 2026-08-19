@@ -1,140 +1,142 @@
-architecture:
-  name: Open Finance Data Exchange Platform
-  version: "3.0.0"
+specVersion: "2.0"
+kind: Architecture
+
+metadata:
+  name: open-finance-data-exchange
   description: >
     Plataforma de dados Open Finance Brasil — Consent-driven, policy-enforced,
     event-driven. Segue BACEN COMEX 35.145 e FAPI-Brazil Security Profile.
-
-  style:
+  architectureStyle:
     - consent-driven
     - policy-enforced
     - event-driven
-    - resource-centric
+    - capability-oriented
     - data-product-oriented
 
-  invariants:
-    - id: INV01
-      rule: "No consent, no execution"
-      description: "Nenhum pipeline pode executar sem consentimento válido e ativo"
-    - id: INV02
-      rule: "No authorized resource, no data access"
-      description: "Extractor só acessa recursos explicitamente autorizados pelo consentimento"
-    - id: INV03
-      rule: "No lineage, no publication"
-      description: "Dado sem rastreabilidade de linhagem não pode ser publicado"
-    - id: INV04
-      rule: "Temporal cannot decide authorization"
-      description: "O engine de execução durável não interpreta regras regulatórias"
-    - id: INV05
-      rule: "Immutable authorized context"
-      description: "O contexto autorizado é imutável durante toda a execução"
-    - id: INV06
-      rule: "Consent versioning"
-      description: "Alteração de consentimento cria nova versão, nunca muta a anterior"
-    - id: INV07
-      rule: "Schema evolution backward-compatible"
-      description: "Novos schemas devem ser compatíveis com versões anteriores"
+technology:
+  language: java
+  runtime: java-25
+  framework: spring-boot-4.1.0
+  cloud: spring-cloud-2025.1.2
+  build: maven
+  orm: jpa-hibernate
+  migrations: flyway
+  orchestration: temporal-1.26.0
+  messaging: kafka
+  transactionalDatabase: postgresql-15
+  cache: redis-7
+  analytics: clickhouse
+  timeSeries: timescaleDB
+  objectStorage: minio-s3
+  search: elasticsearch
+  identity: keycloak
+  apiGateway: traefik
+  serviceMesh: istio
+  observability:
+    standard: opentelemetry
+    metrics: prometheus
+    dashboards: grafana
+    traces: jaeger
+    logs: elk
 
-principles:
-  - id: P01
-    rule: "No consent, no execution"
-    rationale: "BACEN COMEX 35.145 — consentimento é pré-requisito absoluto"
-  - id: P02
-    rule: "No authorized resource, no data access"
-    rationale: "Princípio do menor privilégio — cada recurso requer autorização explícita"
-  - id: P03
-    rule: "No lineage, no publication"
-    rationale: "Rastreabilidade obrigatória para compliance e auditoria"
-  - id: P04
-    rule: "Immutable audit trail"
-    rationale: "Histórico de decisões não pode ser alterado"
-  - id: P05
-    rule: "Sender-constrained tokens"
-    rationale: "FAPI-Brazil — tokens DTLS ou DPoP"
+invariants:
+  - id: INV-001
+    rule: NO_CONSENT_NO_EXECUTION
+    severity: critical
+    description: >
+      Nenhum pipeline pode executar sem consentimento válido e ativo.
+      Violation: extract data without valid consent → pipeline MUST fail.
+
+  - id: INV-002
+    rule: NO_AUTHORIZED_RESOURCE_NO_ACCESS
+    severity: critical
+    description: >
+      Extractor só acessa recursos explicitamente autorizados pelo consentimento.
+      Violation: access resource not in authorized context → extractor MUST reject.
+
+  - id: INV-003
+    rule: NO_LINEAGE_NO_PUBLICATION
+    severity: critical
+    description: >
+      Dado sem rastreabilidade de linhagem não pode ser publicado.
+      Violation: publish without lineage → pipeline MUST fail at publish stage.
+
+  - id: INV-004
+    rule: TEMPORAL_MUST_NOT_AUTHORIZE
+    severity: critical
+    description: >
+      O engine Temporal NÃO interpreta regras regulatórias ou de autorização.
+      Violation: Temporal activity containing authorization logic → ARCHITECTURE TEST FAIL.
+
+  - id: INV-005
+    rule: IMMUTABLE_AUTHORIZED_CONTEXT
+    severity: critical
+    description: >
+      O contexto autorizado é imutável durante toda a execução.
+      Violation: mutate authorized context → runtime MUST reject.
+
+  - id: INV-006
+    rule: CONSENT_VERSIONING
+    severity: high
+    description: >
+      Alteração de consentimento cria nova versão, nunca muta a anterior.
+      Violation: mutate existing consent → system MUST reject.
+
+  - id: INV-007
+    rule: SCHEMA_BACKWARD_COMPATIBLE
+    severity: high
+    description: >
+      Novos schemas devem ser compatíveis com versões anteriores.
+      Violation: breaking schema change → CI MUST fail.
 
 planes:
 
   trust:
-    description: "Camada de confiança — autenticação, autorização transport, segurança"
-    responsibilities:
-      - participant-authentication
-      - transport-security
-      - token-security
-      - sender-constrained-tokens
-      - certificate-management
-
-    capabilities:
-      - FAPI-Brazil-2.0
-      - OAuth-2.1
-      - OIDC
-      - mTLS
-      - DPoP
-      - PKI
-      - JWT-signed
-      - JWK-rotation
-
     components:
-
       fapi-auth-server:
-        role: authorization-server
-        implements:
-          - OAuth-2.1
-          - FAPI-Brazil
-          - DPoP
-          - mTLS
-        endpoints:
-          - /oauth/authorize
-          - /oauth/token
-          - /oauth/revoke
-          - /oauth/introspect
+        type: service
+        technology: spring-security-oauth2
+        responsibility:
+          - oauth2-authorization
+          - fapi-brazil-compliance
+          - dpop-validation
+          - token-introspection
+        publishes:
+          - token.issued.v1
+          - token.revoked.v1
 
       tls-terminator:
-        role: transport-security
-        implements:
-          - mTLS
-          - TLS-1.3
-        certificate_authority: ICP-Brasil
+        type: infrastructure
+        technology: istio-mtls
+        responsibility:
+          - transport-encryption
+          - certificate-validation
 
       token-service:
-        role: token-issuer
-        implements:
-          - JWT
-          - sender-constrained
-          - short-lived
-        token_lifetime: 300
+        type: service
+        technology: spring-security
+        responsibility:
+          - jwt-issuance
+          - sender-constrained-tokens
+          - jwk-rotation
+        publishes:
+          - token.issued.v1
 
   consent:
-    description: "Camada de consentimento — lifecycle, discovery, policy"
-    responsibilities:
-      - consent-lifecycle-management
-      - resource-discovery
-      - policy-evaluation
-      - authorized-context-creation
-
     components:
-
-      consent-management:
-        role: system-of-record
-        owns:
-          - consent
-          - permissions
-          - purpose
-          - expiration
-          - status
-          - version
-        states:
-          - PENDING
-          - AUTHORIZED
-          - ACTIVE
-          - REVOKED
-          - EXPIRED
-          - REJECTED
-        events_emitted:
-          - ConsentGranted
-          - ConsentUpdated
-          - ConsentRenewed
-          - ConsentRevoked
-          - ConsentExpired
+      consent-service:
+        type: service
+        responsibility:
+          - manage_consent
+          - manage_permissions
+          - manage_expiration
+          - maintain_consent_versions
+        persistence: postgresql
+        publishes:
+          - consent.granted.v1
+          - consent.updated.v1
+          - consent.revoked.v1
+          - consent.expired.v1
         api:
           - POST /api/v1/consents
           - GET /api/v1/consents/{id}
@@ -143,121 +145,123 @@ planes:
           - POST /api/v1/consents/{id}/authorize
 
       resource-discovery:
-        role: graph-resolver
+        type: service
+        responsibility:
+          - discover_authorized_resources
+          - build_resource_graph
         input:
-          - consent
-          - permissions
+          - consentId
+          - permissions[]
         output:
-          - authorized-resource-graph
-        description: >
-          Descobre quais recursos de dados estão acessíveis dado um consentimento.
-          Retorna grafo de recursos com caminhos e dependências.
+          schema: AuthorizedResourceGraph
+        persistence: postgresql
         api:
           - POST /api/v1/resources/discover
           - GET /api/v1/resources/graph/{consentId}
 
       policy-engine:
-        role: authorization-decision-maker
+        type: service
+        responsibility:
+          - evaluate_access
+          - enforce_invariants
+          - audit_decisions
         input:
+          - subject
           - consent
-          - resource
-          - permission
           - purpose
-          - context
+          - permission
+          - resource
         output:
-          - authorization-decision
-        rules:
-          - consent-must-be-active
-          - permission-must-cover-resource
-          - purpose-must-be-valid
-          - token-must-be-valid
-          - dpop-must-match
-        forbidden_actions:
-          - direct-data-access
-          - bypass-consent
+          enum:
+            - ALLOW
+            - DENY
+        persistence: postgresql
         api:
           - POST /api/v1/policy/evaluate
+          - GET /api/v1/policy/rules
+          - GET /api/v1/policy/decisions
 
       authorized-context:
-        type: immutable-record
-        immutable: true
-        contains:
-          - subject
-          - consentId
-          - consentVersion
-          - purpose
-          - permissions
-          - resources
-          - validUntil
-          - signingAlgorithm
-          - dpopThumbprint
-        invariants:
-          - "Cannot be modified after creation"
-          - "Must be cryptographically signed"
-          - "Must include full resource graph"
+        type: immutable-artifact
+        responsibility:
+          - carry_authorized_state
+          - cryptographic_signature
+        structure:
+          fields:
+            - contextId
+            - subject
+            - consentId
+            - consentVersion
+            - purpose
+            - permissions[]
+            - resourceGraph
+            - validUntil
+            - signingAlgorithm
+            - dpopThumbprint
+            - signature
+        persistence: postgresql
+        api:
+          - POST /api/v1/contexts
+          - GET /api/v1/contexts/{id}
+          - POST /api/v1/contexts/{id}/validate
+          - POST /api/v1/contexts/{id}/revoke
 
   execution:
-    description: "Camada de execução — orquestração, pipeline, reconciliação"
-    responsibilities:
-      - execution-planning
-      - durable-execution
-      - retry-recovery
-      - parallelism
-      - reconciliation
-
     components:
-
       extraction-planner:
-        role: plan-generator
-        input:
-          - authorized-context
-          - resource-graph
-        output:
-          - execution-plan
-        description: >
-          Gera plano de extração DAG baseado no grafo de recursos autorizados.
-          Cada nó representa uma operação de extração com dependências.
+        type: service
+        responsibility:
+          - build_execution_dag
+          - topological_sort
+          - assign_idempotency_keys
+          - validate_dag
+        consumes:
+          - AuthorizedContext
+          - AuthorizedResourceGraph
+        produces:
+          - ExecutionPlan
+        persistence: postgresql
+        api:
+          - POST /api/v1/plans
+          - GET /api/v1/plans/{planId}
+          - GET /api/v1/plans/{planId}/status
+          - POST /api/v1/plans/{planId}/cancel
 
       execution-plan:
-        type: DAG
-        immutable: true
-        attributes:
-          - planId
-          - consentId
-          - consentVersion
-          - createdAt
-          - validUntil
+        type: immutable-artifact
+        structure: DAG
         node_attributes:
           - nodeId
           - capability
           - resource
-          - dependencies
+          - dependencies[]
           - authorization
           - retryPolicy
           - timeout
           - rateLimit
           - idempotencyKey
           - schemaVersion
-        serialization: protobuf
+        persistence: postgresql
 
-      temporal:
-        role: durable-execution-engine
-        technology: Temporal
-        version: "1.26.0"
-        responsibilities:
+      workflow-engine:
+        technology: temporal-1.26.0
+        taskQueues:
+          - openfinance-extraction
+          - openfinance-reconciliation
+        allowed:
           - orchestration
-          - retry
+          - retries
           - timeout
           - parallelism
           - cancellation
           - recovery
-          - workflow-versioning
           - signal-handling
-        forbidden_responsibilities:
-          - consent-decision
-          - authorization-decision
-          - regulatory-rule-interpretation
-          - direct-data-access
+          - workflow-versioning
+        forbidden:
+          - authorization_decision
+          - consent_decision
+          - regulatory_policy_decision
+          - direct_source_access
         workflows:
           - DataExtractionWorkflow
           - ConsentMonitoringWorkflow
@@ -270,477 +274,251 @@ planes:
           - ReconcileActivity
 
       reconciliation:
-        role: consistency-checker
-        responsibilities:
-          - expected-vs-extracted
-          - divergence-detection
-          - repair
-          - reprocessing
-          - gap-filling
+        type: service
+        responsibility:
+          - compare_expected_vs_extracted
+          - detect_missing_resources
+          - detect_divergences
+          - trigger_repair
+          - reprocess
+        persistence: postgresql
         api:
           - GET /api/v1/reconciliation/{planId}/status
           - POST /api/v1/reconciliation/{planId}/repair
+          - GET /api/v1/reconciliation/{planId}/report
 
-  data_plane:
-    description: "Plano de dados — extração, transformação, validação, publicação"
-    responsibilities:
-      - data-extraction
-      - canonicalization
-      - schema-validation
-      - data-quality
-      - pii-classification
-      - lineage-tracking
-      - publication
-
+  dataPlane:
     stages:
       - id: extraction
-        description: "Extração do sistema legado"
         input: source-system
         output: raw-record
+        immutable: true
+        requirements:
+          - idempotent: true
+          - authorized-context-required: true
+
       - id: canonicalization
-        description: "Padronização para modelo canonical"
         input: raw-record
         output: canonical-record
+        requirements:
+          - schema-versioning: true
+
       - id: schema-validation
-        description: "Validação contra schema registrado"
         input: canonical-record
         output: validated-record
+        requirements:
+          - schema-registry: true
+          - backward-compatible: true
+
       - id: data-quality
-        description: "Regras de qualidade de dados"
         input: validated-record
         output: quality-checked-record
+        requirements:
+          - score-threshold: 80
+
       - id: pii-classification
-        description: "Classificação e proteção de dados pessoais"
         input: quality-checked-record
         output: pii-classified-record
+        requirements:
+          - detection: mandatory
+          - protection: mandatory
+
       - id: lineage
-        description: "Registro de linhagem completa"
         input: pii-classified-record
         output: lineage-registered-record
+        requirements:
+          - mandatory: true
+          - chain-complete: true
+
       - id: publication
-        description: "Publicação para consumidores autorizados"
         input: lineage-registered-record
         output: published-data
+        requirements:
+          - valid-authorization: true
+          - successful-validation: true
+          - lineage-created: true
 
   distribution:
-    description: "Plano de distribuição — como dados chegam aos consumidores"
-    responsibilities:
-      - event-streaming
-      - api-serving
-      - data-product-delivery
-      - subscription-management
-
     channels:
-      - event-streaming:
-          technology: Kafka
-          topics_pattern: "openfinance.{domain}.{entity}.{event}.{version}"
-      - rest-api:
-          technology: Spring Boot
-          auth: FAPI-Brazil
-      - data-products:
-          technology: ClickHouse + MinIO
-          format: Parquet + JSON
-      - graphql:
-          technology: Spring GraphQL
-          description: "Consulta ad-hoc de dados Open Finance"
+      kafka:
+        enabled: true
+        topicPattern: "{domain}.{event}.{version}"
+      api:
+        enabled: true
+        auth: fapi-brazil
+      dataProducts:
+        enabled: true
+        storage: clickhouse-minio
+      subscriptions:
+        enabled: true
+        webhook: true
 
 domains:
-
   accounts:
-    description: "Dados de contas correntes e poupança"
     capabilities:
-      - account-data
-      - balances
-      - transactions
-      - credit-cards-bills
-    resource_types:
-      - accounts
-      - balances
-      - transactions
+      balances:
+        pipeline: AccountBalancePipeline
+        extractor: CoreAccountExtractor
+        source: PostgreSQL
+      transactions:
+        pipeline: AccountTransactionPipeline
+        extractor: CoreAccountExtractor
+        source: PostgreSQL
 
   credit-cards:
-    description: "Dados de cartões de crédito"
     capabilities:
-      - card-account
-      - limits
-      - bills
-      - transactions
-      - card-status
-    resource_types:
-      - credit-cards
-      - credit-card-transactions
-      - credit-card-bills
+      accounts:
+        pipeline: CreditCardAccountPipeline
+        extractor: CoreCardExtractor
+        source: PostgreSQL
+      transactions:
+        pipeline: CreditCardTransactionPipeline
+        extractor: CoreCardExtractor
+        source: PostgreSQL
+      bills:
+        pipeline: CreditCardBillPipeline
+        extractor: CoreCardExtractor
+        source: PostgreSQL
 
   loans:
-    description: "Dados de empréstimos e financiamentos"
     capabilities:
-      - contracts
-      - installments
-      - payments
-    resource_types:
-      - loans
-      - loan-installments
+      contracts:
+        pipeline: LoanContractPipeline
+        extractor: CoreLoanExtractor
+        source: PostgreSQL
+      installments:
+        pipeline: LoanInstallmentPipeline
+        extractor: CoreLoanExtractor
+        source: PostgreSQL
 
   investments:
-    description: "Dados de investimentos"
     capabilities:
-      - positions
-      - transactions
-      - portfolio
-    resource_types:
-      - investments
-      - investment-transactions
+      positions:
+        pipeline: InvestmentPositionPipeline
+        extractor: CoreInvestmentExtractor
+        source: PostgreSQL
+      transactions:
+        pipeline: InvestmentTransactionPipeline
+        extractor: CoreInvestmentExtractor
+        source: PostgreSQL
 
-  credit:
-    description: "Dados de crédito (score, compromissos)"
-    capabilities:
-      - credit-score
-      - credit-commitments
-    resource_types:
-      - credit-data
+pipeline:
+  requiredStages:
+    - authorize
+    - extract
+    - normalize
+    - validate
+    - persist
+    - publish
 
-pipeline_pattern:
+  requirements:
+    authorize:
+      policyCheck: mandatory
+      description: "Policy Engine validates authorization before extraction"
+    extract:
+      idempotent: true
+      authorizedContextRequired: true
+      description: "Extractor requires AuthorizedContext, uses idempotencyKey"
+    normalize:
+      output: canonical-model
+      description: "Raw data converted to canonical Open Finance format"
+    validate:
+      schemaValidation: mandatory
+      dataQuality: mandatory
+      description: "Schema Registry + quality scoring (threshold 80)"
+    persist:
+      lineage: mandatory
+      description: "Lineage chain registered before storage"
+    publish:
+      requires:
+        - valid_authorization
+        - successful_validation
+        - lineage_created
+        - idempotency_verified
+      description: "Publication gated on full pipeline success"
 
-  hierarchy:
-    - domain
-    - capability
-    - pipeline
-    - extractor
-    - source-adapter
-
-  examples:
-    - domain: credit-cards
-      capabilities:
-        transactions:
-          pipeline: CreditCardTransactionPipeline
-          extractors:
-            - LegacyCardExtractor
-            - NewCoreCardExtractor
-          adapters:
-            - MainframeAdapter
-            - OracleAdapter
-
-    - domain: accounts
-      capabilities:
-        balances:
-          pipeline: AccountBalancePipeline
-          extractors:
-            - CoreAccountExtractor
-          adapters:
-            - PostgreSQLAdapter
-
-    - domain: loans
-      capabilities:
-        installments:
-          pipeline: LoanInstallmentPipeline
-          extractors:
-            - CreditModuleExtractor
-          adapters:
-            - PostgreSQLAdapter
-
-  extractor_pattern:
-    interface: DataExtractor
-    methods:
-      - extract(context: AuthorizedContext, resource: Resource): RawData
-      - validate(data: RawData): ValidationResult
-      - supports(resource: ResourceType): boolean
-    implementation:
-      - BaseExtractor (abstract)
-      - LegacyCardExtractor
-      - NewCoreCardExtractor
-      - CoreAccountExtractor
-      - CreditModuleExtractor
-
-events:
-
-  consent_events:
-    - ConsentGranted
-    - ConsentUpdated
-    - ConsentRenewed
-    - ConsentRevoked
-    - ConsentExpired
-
-  data_events:
-    - DataExtracted
-    - DataTransformed
-    - DataValidated
-    - DataPublished
-    - DataQualityFailed
-    - LineageRecorded
-
-  system_events:
-    - ExecutionPlanCreated
-    - WorkflowStarted
-    - WorkflowCompleted
-    - WorkflowFailed
-    - ReconciliationTriggered
-    - CircuitBreakerTripped
-    - RateLimitExceeded
-
-relationships:
-
-  # Trust → Consent
-  - from: tls-terminator
-    to: fapi-auth-server
-    type: secures-transport
-
-  - from: token-service
-    to: fapi-auth-server
-    type: issues-tokens
-
-  # Consent flow
-  - from: consent-management
-    to: resource-discovery
-    type: provides-consent
-    description: "Consentimento validado alimenta descoberta de recursos"
-
-  - from: resource-discovery
-    to: policy-engine
-    type: provides-authorized-resources
-    description: "Grafo de recursos alimenta avaliação de política"
-
-  - from: policy-engine
-    to: extraction-planner
-    type: provides-authorized-context
-    description: "Contexto imutável alimenta planejamento"
-
-  # Execution flow
-  - from: extraction-planner
-    to: temporal
-    type: provides-execution-plan
-    description: "Plano DAG entregue ao engine de execução"
-
-  - from: temporal
-    to: reconciliation
-    type: triggers-reconciliation
-    description: "Após execução, reconciliação verifica consistência"
-
-  # Data flow
-  - from: temporal
-    to: data-extraction
-    type: orchestrates
-    description: "Temporal orquestra extração via Activities"
-
-  - from: data-extraction
-    to: canonicalization
-    type: feeds
-    description: "Dados brutos canonicalizados"
-
-  - from: canonicalization
-    to: schema-validation
-    type: feeds
-    description: "Registros validados contra schema"
-
-  - from: schema-validation
-    to: data-quality
-    type: feeds
-    description: "Registros validados passam quality check"
-
-  - from: data-quality
-    to: pii-classification
-    type: feeds
-    description: "Dados classificados para proteção PII"
-
-  - from: pii-classification
-    to: lineage
-    type: feeds
-    description: "Linhagem registrada antes da publicação"
-
-  - from: lineage
-    to: publication
-    type: feeds
-    description: "Dados publicados com rastreabilidade completa"
-
-  # Distribution
-  - from: publication
-    to: event-streaming
-    type: publishes-to
-    description: "Eventos publicados no Kafka"
-
-  - from: publication
-    to: rest-api
-    type: serves-via
-    description: "Dados servidos via API REST FAPI"
-
-  - from: publication
-    to: data-products
-    type: materializes-to
-    description: "Dados materializados como data products"
-
-cross_cutting:
-  - id: CC01
-    name: policy-enforcement
-    description: "Avaliação de política em cada ponto de acesso a dados"
-  - id: CC02
-    name: idempotency
-    description: "Operações idempotentes via idempotencyKey"
-  - id: CC03
-    name: observability
-    description: "Métricas Prometheus + traces OpenTelemetry"
-  - id: CC04
-    name: distributed-tracing
-    description: "Trace ID propagado consentId → workflowId → pipelineExecutionId"
-  - id: CC05
-    name: audit
-    description: "Audit log imutável de todas as operações"
-  - id: CC06
-    name: data-lineage
-    description: "OpenLineage para rastreabilidade completa"
-  - id: CC07
-    name: encryption
-    description: "AES-256-GCM em repouso, TLS 1.3 em trânsito"
-  - id: CC08
-    name: pii-protection
-    description: "Classificação e ofuscação automática de dados pessoais"
-  - id: CC09
-    name: schema-registry
-    description: "Confluent Schema Registry com compatibilidade BACKWARD"
-  - id: CC10
-    name: rate-limiting
-    description: "Rate limit por participant + por consentimento"
-  - id: CC11
-    name: circuit-breaker
-    description: "Resilience4j para chamadas a sistemas legados"
-  - id: CC12
-    name: retention
-    description: "Retenção regulatória: 5 anos para dados Open Finance"
-  - id: CC13
-    name: contract-versioning
-    description: "Versionamento de contratos APIs via URI"
-  - id: CC14
-    name: reconciliation
-    description: "Reconciliação esperado vs extraído com auto-repair"
+idempotency:
+  workflow:
+    key:
+      - consentId
+      - consentVersion
+      - executionPurpose
+  pipeline:
+    key:
+      - executionId
+      - capability
+  record:
+    key:
+      - sourceSystem
+      - resourceType
+      - resourceId
+      - sourceVersion
 
 traceability:
-  chain:
+  requiredChain:
     - consentId
+    - consentVersion
     - resourceId
     - executionPlanId
-    - workflowId
-    - activityId
+    - temporalWorkflowId
     - pipelineExecutionId
     - sourceRecordId
     - canonicalRecordId
     - publicationId
-  description: >
-    Cada dado publicado pode ser rastreado de volta ao consentimento
-    que autorizou sua extração. A cadeia é imutável e auditável.
 
-flows:
+security:
+  principles:
+    - zero-trust
+    - least-privilege
+    - defense-in-depth
+  protocols:
+    - fapi-brazil
+    - oauth2
+    - oidc
+    - mtls
+    - dpop
+  sensitiveData:
+    encryptionAtRest: AES-256-GCM
+    encryptionInTransit: TLS-1.3
+    piiDetection: mandatory
+    piiProtection: mask-hash-encrypt
 
-  consent_to_execution:
-    description: "Fluxo completo de consentimento à execução"
-    steps:
-      - step: 1
-        component: consent-management
-        action: "Receber e registrar consentimento"
-        output: consent
-      - step: 2
-        component: resource-discovery
-        action: "Descobrir recursos acessíveis"
-        output: authorized-resource-graph
-      - step: 3
-        component: policy-engine
-        action: "Avaliar política e gerar contexto"
-        output: authorized-context
-      - step: 4
-        component: extraction-planner
-        action: "Gerar plano de extração DAG"
-        output: execution-plan
-      - step: 5
-        component: temporal
-        action: "Executar workflow durável"
-        output: extracted-data
+observability:
+  standard: opentelemetry
+  requiredContext:
+    - traceId
+    - correlationId
+    - consentId
+    - executionId
+    - workflowId
+    - pipelineExecutionId
+  requiredMetrics:
+    - consent_approval_rate
+    - extraction_success_rate
+    - pipeline_latency_p99
+    - reconciliation_divergence_rate
+    - data_freshness
+    - policy_decision_rate
 
-  extraction:
-    description: "Fluxo de extração de dados"
-    steps:
-      - step: 1
-        component: temporal
-        action: "Iniciar DataExtractionWorkflow"
-      - step: 2
-        component: data-extraction
-        action: "Executar extractor via Activity"
-      - step: 3
-        component: policy-enforcement-point
-        action: "Validar acesso autorizado"
-      - step: 4
-        component: source-adapter
-        action: "Acessar sistema legado"
-        note: "Único ponto que toca dados brutos"
-
-  data_processing:
-    description: "Fluxo de processamento de dados"
-    steps:
-      - step: 1
-        stage: raw
-        description: "Dados brutos extraídos"
-      - step: 2
-        stage: canonicalization
-        description: "Padronização para modelo Open Finance"
-      - step: 3
-        stage: schema-validation
-        description: "Validação contra schema Avro/JSON"
-      - step: 4
-        stage: data-quality
-        description: "Regras de qualidade (completude, consistência)"
-      - step: 5
-        stage: pii-classification
-        description: "Identificação e proteção de dados pessoais"
-      - step: 6
-        stage: lineage
-        description: "Registro de linhagem OpenLineage"
-      - step: 7
-        stage: publication
-        description: "Publicação para consumidores autorizados"
-
-metrics:
-  sre:
-    - name: consent_approval_rate
-      description: "Taxa de aprovação de consentimentos"
-      target: "> 80%"
-    - name: extraction_success_rate
-      description: "Taxa de sucesso de extração"
-      target: "> 99.5%"
-    - name: pipeline_latency_p99
-      description: "Latência P99 do pipeline completo"
-      target: "< 5s"
-    - name: reconciliation_divergence_rate
-      description: "Taxa de divergência na reconciliação"
-      target: "< 0.1%"
-    - name: data_freshness
-      description: "Tempo desde última extração bem-sucedida"
-      target: "< 15 min"
-
-technology:
-  backend:
-    language: Java 25
-    framework: Spring Boot 4.1.0
-    cloud: Spring Cloud 2025.1.2
-    build: Maven
-    orm: JPA/Hibernate
-    migrations: Flyway
-  infrastructure:
-    api-gateway: Traefik
-    service-mesh: Istio
-    orchestration: Kubernetes + Helm
-    ci-cd: ArgoCD
-    secrets: HashiCorp Vault
-  data:
-    primary-db: PostgreSQL 15
-    streaming: Apache Kafka
-    analytics: ClickHouse
-    time-series: TimescaleDB
-    cache: Redis 7
-    object-storage: MinIO (S3)
-    search: Elasticsearch
-  ml:
-    serving: FastAPI + gRPC
-    tracking: MLflow
-    features: Feast
-    explainability: SHAP + LIME
-  observability:
-    metrics: Prometheus + Grafana
-    traces: OpenTelemetry + Jaeger
-    logs: ELK Stack
-    alerts: Alertmanager
+failureHandling:
+  transient:
+    strategy: temporal-retry
+    maxRetries: 3
+    backoff: exponential
+  permanent:
+    strategy: dlq
+    notification: kafka
+  consentRevoked:
+    action:
+      - cancel_affected_workflows
+      - prevent_new_source_access
+      - mark_in_progress_as_cancelled
+  partialExtraction:
+    action:
+      - mark_partial
+      - reconcile
+      - repair
+      - reprocess
+  duplicate:
+    action:
+      - discard_by_idempotency_key
