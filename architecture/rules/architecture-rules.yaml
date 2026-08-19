@@ -1,0 +1,233 @@
+# Architecture Compliance Rules
+# Validação automática do modelo de arquitetura
+
+rules:
+
+  # ─── Consent Invariants ───
+
+  - id: RULE-001
+    name: "No bypass consent"
+    severity: CRITICAL
+    description: "Nenhum componente pode acessar dados sem passar pelo Consent Plane"
+    check: |
+      every component in architecture.planes.*.components:
+        component.role != "data-access" OR
+        component.required_inputs CONTAINS "authorized-context"
+    violation: "Componente acessa dados sem authorized-context"
+    reference: INV01
+
+  - id: RULE-002
+    name: "Consent required for execution"
+    severity: CRITICAL
+    description: "Nenhum workflow pode iniciar sem consentimento válido"
+    check: |
+      every workflow in architecture.planes.execution.components.temporal.workflows:
+        workflow.input CONTAINS "consentId" AND
+        workflow.input CONTAINS "consentVersion"
+    violation: "Workflow sem referência a consentimento"
+    reference: INV01
+
+  # ─── Temporal Restrictions ───
+
+  - id: RULE-003
+    name: "Temporal no authorization"
+    severity: CRITICAL
+    description: "Temporal não pode acessar decisões de autorização"
+    check: |
+      architecture.planes.execution.components.temporal.forbidden_responsibilities CONTAINS
+      "authorization-decision"
+    violation: "Temporal tem acesso a decisões de autorização"
+    reference: INV04
+
+  - id: RULE-004
+    name: "Temporal no consent decisions"
+    severity: CRITICAL
+    description: "Temporal não pode tomar decisões de consentimento"
+    check: |
+      architecture.planes.execution.components.temporal.forbidden_responsibilities CONTAINS
+      "consent-decision"
+    violation: "Temporal toma decisões de consentimento"
+    reference: INV04
+
+  - id: RULE-005
+    name: "Temporal no direct data access"
+    severity: CRITICAL
+    description: "Temporal não pode acessar dados diretamente"
+    check: |
+      architecture.planes.execution.components.temporal.forbidden_responsibilities CONTAINS
+      "direct-data-access"
+    violation: "Temporal acessa dados diretamente"
+    reference: INV04
+
+  # ─── Data Traceability ───
+
+  - id: RULE-006
+    name: "Lineage required before publication"
+    severity: HIGH
+    description: "Dados devem passar por lineage antes da publicação"
+    check: |
+      architecture.planes.data_plane.stages.index("lineage") <
+      architecture.planes.data_plane.stages.index("publication")
+    violation: "Publicação ocorre antes do registro de linhagem"
+    reference: INV03
+
+  - id: RULE-007
+    name: "Full traceability chain"
+    severity: HIGH
+    description: "Cadeia de rastreabilidade deve ser completa"
+    check: |
+      architecture.traceability.chain CONTAINS ALL:
+        ["consentId", "resourceId", "executionPlanId", "workflowId",
+         "activityId", "pipelineExecutionId", "sourceRecordId",
+         "canonicalRecordId", "publicationId"]
+    violation: "Cadeia de rastreabilidade incompleta"
+    reference: INV03
+
+  # ─── Schema Evolution ───
+
+  - id: RULE-008
+    name: "Backward-compatible schema"
+    severity: HIGH
+    description: "Novos schemas devem ser compatíveis com versões anteriores"
+    check: |
+      architecture.cross_cutting CONTAINS record where:
+        record.name == "schema-registry" AND
+        record.description CONTAINS "BACKWARD"
+    violation: "Schema registry não configurado com compatibilidade BACKWARD"
+    reference: INV07
+
+  # ─── Pipeline Requirements ───
+
+  - id: RULE-009
+    name: "Every pipeline has reconciliation"
+    severity: HIGH
+    description: "Todo pipeline deve ter reconciliação"
+    check: |
+      architecture.planes.execution.components CONTAINS "reconciliation"
+    violation: "Pipeline sem componente de reconciliação"
+    reference: CC14
+
+  - id: RULE-010
+    name: "Data stages complete"
+    severity: MEDIUM
+    description: "Pipeline de dados deve ter todos os 7 estágios"
+    check: |
+      architecture.planes.data_plane.stages COUNT == 7
+    violation: "Pipeline de dados com estágios faltando"
+    reference: data-plane
+
+  # ─── Security ───
+
+  - id: RULE-011
+    name: "FAPI-Brazil required"
+    severity: CRITICAL
+    description: "Autenticação deve usar FAPI-Brazil"
+    check: |
+      architecture.planes.trust.components.fapi-auth-server.implements CONTAINS "FAPI-Brazil"
+    violation: "Servidor de autorização não implementa FAPI-Brazil"
+    reference: P05
+
+  - id: RULE-012
+    name: "Sender-constrained tokens"
+    severity: CRITICAL
+    description: "Tokens devem ser sender-constrained (DPoP ou DTLS)"
+    check: |
+      architecture.planes.trust.capabilities CONTAINS "DPoP" AND
+      architecture.principles CONTAINS record where record.rule == "Sender-constrained tokens"
+    violation: "Tokens não são sender-constrained"
+    reference: P05
+
+  - id: RULE-013
+    name: "mTLS required"
+    severity: HIGH
+    description: "Transporte deve usar mTLS"
+    check: |
+      architecture.planes.trust.capabilities CONTAINS "mTLS" AND
+      architecture.planes.trust.components.tls-terminator.implements CONTAINS "mTLS"
+    violation: "mTLS não configurado"
+    reference: trust-plane
+
+  # ─── Consent Versioning ───
+
+  - id: RULE-014
+    name: "Consent version immutable"
+    severity: HIGH
+    description: "Consentimento nunca é mutado — cria nova versão"
+    check: |
+      architecture.planes.consent.components.consent-management.states CONTAINS "AUTHORIZED" AND
+      architecture.invariants CONTAINS record where record.rule == "Consent versioning"
+    violation: "Consentimento pode ser mutado em vez de versionado"
+    reference: INV06
+
+  # ─── Authorized Context ───
+
+  - id: RULE-015
+    name: "Authorized context immutable"
+    severity: CRITICAL
+    description: "Authorized context deve ser imutável"
+    check: |
+      architecture.planes.consent.components.authorized-context.immutable == true AND
+      architecture.planes.consent.components.authorized-context.invariants CONTAINS
+      "Cannot be modified after creation"
+    violation: "Authorized context não é imutável"
+    reference: INV05
+
+  # ─── Cross-cutting ───
+
+  - id: RULE-016
+    name: "Observability required"
+    severity: MEDIUM
+    description: "Plataforma deve ter observabilidade completa"
+    check: |
+      architecture.cross_cutting CONTAINS record where record.name == "observability" AND
+      architecture.cross_cutting CONTAINS record where record.name == "distributed-tracing"
+    violation: "Observabilidade ou distributed tracing não configurados"
+    reference: CC03, CC04
+
+  - id: RULE-017
+    name: "Audit trail required"
+    severity: HIGH
+    description: "Trail de auditoria imutável deve existir"
+    check: |
+      architecture.cross_cutting CONTAINS record where record.name == "audit" AND
+      architecture.principles CONTAINS record where record.rule == "Immutable audit trail"
+    violation: "Audit trail não configurado ou não imutável"
+    reference: CC05, P04
+
+  - id: RULE-018
+    name: "Encryption at rest and in transit"
+    severity: HIGH
+    description: "Dados devem ser criptografados em repouso e trânsito"
+    check: |
+      architecture.cross_cutting CONTAINS record where:
+        record.name == "encryption" AND
+        record.description CONTAINS "AES-256-GCM" AND
+        record.description CONTAINS "TLS 1.3"
+    violation: "Criptografia não configurada corretamente"
+    reference: CC07
+
+  # ─── Distribution ───
+
+  - id: RULE-019
+    name: "Kafka topic naming"
+    severity: MEDIUM
+    description: "Topics Kafka devem seguir padrão openfinance.{domain}.{entity}.{event}.{version}"
+    check: |
+      architecture.planes.distribution.channels CONTAINS record where:
+        record.event-streaming.topics_pattern ==
+        "openfinance.{domain}.{entity}.{event}.{version}"
+    violation: "Padrão de topics Kafka não segue convenção"
+    reference: distribution-plane
+
+  # ─── Domain Coverage ───
+
+  - id: RULE-020
+    name: "All domains have extractors"
+    severity: MEDIUM
+    description: "Todo domínio deve ter pelo menos um extractor documentado"
+    check: |
+      every domain in architecture.domains:
+        architecture.pipeline_pattern.examples CONTAINS record where
+        record.domain == domain.name
+    violation: "Domínio sem extractor documentado no pipeline_pattern"
+    reference: pipeline_pattern

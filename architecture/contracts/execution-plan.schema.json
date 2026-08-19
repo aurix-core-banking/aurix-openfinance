@@ -1,0 +1,222 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aurix-platform.com/schemas/openfinance/execution-plan/v1.schema.json",
+  "title": "Execution Plan",
+  "description": "Immutable DAG execution plan for Open Finance data extraction pipelines",
+  "type": "object",
+  "required": ["planId", "consentId", "consentVersion", "createdAt", "validUntil", "nodes", "edges"],
+  "properties": {
+    "planId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique execution plan identifier"
+    },
+    "consentId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Reference to the consent that authorizes this execution"
+    },
+    "consentVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Version of the consent at plan creation time"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Plan creation timestamp (ISO 8601)"
+    },
+    "validUntil": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Plan expiration timestamp"
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["nodeId", "capability", "resource", "extractor", "authorization", "retryPolicy", "timeout", "idempotencyKey", "schemaVersion"],
+        "properties": {
+          "nodeId": {
+            "type": "string",
+            "description": "Unique node identifier within the plan"
+          },
+          "capability": {
+            "type": "string",
+            "description": "Capability this node implements (e.g., credit-card-transactions)"
+          },
+          "resource": {
+            "type": "object",
+            "required": ["type", "path"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "description": "Resource type"
+              },
+              "path": {
+                "type": "string",
+                "description": "Resource access path"
+              }
+            },
+            "description": "Target resource for extraction"
+          },
+          "extractor": {
+            "type": "string",
+            "description": "Extractor class to use (e.g., LegacyCardExtractor)"
+          },
+          "adapter": {
+            "type": "string",
+            "description": "Source adapter class (e.g., MainframeAdapter)"
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "description": "Node IDs that must complete before this node starts"
+          },
+          "authorization": {
+            "type": "object",
+            "required": ["permissions", "purpose", "validUntil"],
+            "properties": {
+              "permissions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Authorized permissions for this node"
+              },
+              "purpose": {
+                "type": "string",
+                "description": "Authorized purpose"
+              },
+              "validUntil": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Authorization expiration"
+              },
+              "dpopThumbprint": {
+                "type": "string",
+                "description": "DPoP thumbprint for sender-constrained access"
+              }
+            },
+            "description": "Authorization context fragment for this node"
+          },
+          "retryPolicy": {
+            "type": "object",
+            "required": ["maxAttempts", "backoffCoefficient", "initialInterval", "maximumInterval"],
+            "properties": {
+              "maxAttempts": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10,
+                "description": "Maximum number of retry attempts"
+              },
+              "backoffCoefficient": {
+                "type": "number",
+                "minimum": 1.0,
+                "description": "Backoff multiplier for retries"
+              },
+              "initialInterval": {
+                "type": "string",
+                "description": "Initial retry interval (ISO 8601 duration)"
+              },
+              "maximumInterval": {
+                "type": "string",
+                "description": "Maximum retry interval (ISO 8601 duration)"
+              }
+            },
+            "description": "Retry policy for this extraction node"
+          },
+          "timeout": {
+            "type": "string",
+            "description": "Maximum duration for this node (ISO 8601 duration)"
+          },
+          "rateLimit": {
+            "type": "object",
+            "properties": {
+              "requestsPerSecond": {
+                "type": "number",
+                "minimum": 0.1,
+                "description": "Maximum requests per second"
+              },
+              "burstSize": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Maximum burst size"
+              }
+            },
+            "description": "Rate limiting configuration"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "Idempotency key for deduplication"
+          },
+          "schemaVersion": {
+            "type": "string",
+            "description": "Expected output schema version"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Additional node metadata"
+          }
+        }
+      },
+      "minItems": 1,
+      "description": "DAG nodes representing extraction operations"
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from", "to"],
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "Source node ID"
+          },
+          "to": {
+            "type": "string",
+            "description": "Target node ID"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["dependency", "data-flow", "conditional"],
+            "default": "dependency",
+            "description": "Edge type"
+          },
+          "condition": {
+            "type": "string",
+            "description": "Condition for conditional edges (CEL expression)"
+          }
+        }
+      },
+      "description": "DAG edges representing dependencies between nodes"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "domain": {
+          "type": "string",
+          "description": "Primary domain (e.g., credit-cards, accounts)"
+        },
+        "generatedBy": {
+          "type": "string",
+          "description": "Component that generated this plan"
+        },
+        "traceId": {
+          "type": "string",
+          "description": "Distributed trace ID"
+        },
+        "policyVersion": {
+          "type": "string",
+          "description": "Policy version used for authorization"
+        }
+      },
+      "description": "Plan-level metadata"
+    }
+  },
+  "additionalProperties": false
+}

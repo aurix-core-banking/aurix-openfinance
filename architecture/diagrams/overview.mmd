@@ -1,0 +1,66 @@
+graph TB
+    subgraph "TRUST PLANE"
+        FAPI[FAPI Auth Server]
+        TLS[TLS/mTLS]
+        TOKEN[Token Service]
+    end
+
+    subgraph "CONSENT PLANE"
+        CM[Consent Management]
+        RD[Resource Discovery]
+        PE[Policy Engine]
+        AC[Authorized Context]
+    end
+
+    subgraph "EXECUTION PLANE"
+        EP[Extraction Planner]
+        PLAN[Execution Plan DAG]
+        TEMP[Temporal Engine]
+        RECON[Reconciliation]
+    end
+
+    subgraph "DATA PLANE"
+        EXTRACT[Extraction]
+        CANON[Canonicalization]
+        SCHEMA[Schema Validation]
+        DQ[Data Quality]
+        PII[PII Classification]
+        LINEAGE[Lineage]
+        PUB[Publication]
+    end
+
+    subgraph "DISTRIBUTION PLANE"
+        KAFKA[Kafka Events]
+        API[REST API]
+        DP[Data Products]
+    end
+
+    subgraph "SOURCE SYSTEMS"
+        CORE[Core Banking]
+        CARD[Card System]
+        CREDIT[Credit Module]
+    end
+
+    TLS --> FAPI
+    FAPI --> TOKEN
+    TOKEN --> CM
+    CM --> RD
+    RD --> PE
+    PE --> AC
+    AC --> EP
+    EP --> PLAN
+    PLAN --> TEMP
+    TEMP --> RECON
+    TEMP --> EXTRACT
+    EXTRACT --> CANON
+    CANON --> SCHEMA
+    SCHEMA --> DQ
+    DQ --> PII
+    PII --> LINEAGE
+    LINEAGE --> PUB
+    PUB --> KAFKA
+    PUB --> API
+    PUB --> DP
+    EXTRACT --> CORE
+    EXTRACT --> CARD
+    EXTRACT --> CREDIT

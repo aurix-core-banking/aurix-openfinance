@@ -1,0 +1,18 @@
+sequenceDiagram
+    participant Participant
+    participant FAPI
+    participant Consent
+    participant Discovery
+    participant Policy
+    participant Planner
+    participant Temporal
+
+    Participant->>FAPI: POST /oauth/authorize (FAPI-Brazil)
+    FAPI->>Consent: Create consent + permissions
+    Consent-->>Participant: consentId + permissions
+    Participant->>Consent: POST /consents/{id}/authorize
+    Consent->>Discovery: Discover accessible resources
+    Discovery->>Policy: Evaluate authorized resources
+    Policy->>Planner: Authorized context (immutable)
+    Planner->>Temporal: Execution plan (DAG)
+    Temporal-->>Participant: Workflow started

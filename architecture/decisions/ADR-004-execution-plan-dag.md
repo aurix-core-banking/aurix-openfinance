@@ -1,0 +1,86 @@
+# ADR-004: Execution Plan como DAG Imutável
+
+## Status
+
+Accepted
+
+## Contexto
+
+Pipelines de extração Open Finance têm dependências complexas:
+- Extrair transações de cartão requer primeiro o cartão
+- Extrair saldos requer primeiro a conta
+- Múltiplos domains podem ser extraídos em paralelo
+- Cada extração tem suas próprias policies de retry e timeout
+
+O plano de execução precisa ser:
+- **DAG** (Directed Acyclic Graph) para representar dependências
+- **Imutável** para auditoria e replay
+- **Serializável** para persistência e distribuição
+- **Versionável** para evolução de schemas
+
+## Decisão
+
+O Execution Plan é um **DAG imutável** serializado em **Protocol Buffers**:
+
+### Estrutura do Plano
+
+```
+ExecutionPlan
+├── planId (UUID)
+├── consentId (referência ao consentimento)
+├── consentVersion (versão do consentimento)
+├── createdAt (timestamp)
+├── validUntil (expiração do plano)
+└── nodes[]
+    ├── nodeId (identificador único)
+    ├── capability (ex: "credit-card-transactions")
+    ├── resource (recurso alvo)
+    ├── dependencies[] (nós precedentes)
+    ├── authorization (Authorized Context fragment)
+    ├── retryPolicy (backoff, max retries)
+    ├── timeout (duração máxima)
+    ├── rateLimit (requisições por segundo)
+    ├── idempotencyKey (chave de idempotência)
+    └── schemaVersion (versão do schema de output)
+```
+
+### Serialização
+
+- **Formato**: Protocol Buffers (protobuf)
+- **Schema Registry**: Confluent Schema Registry com compatibilidade BACKWARD
+- **Versionamento**: Cada mudança de schema cria nova versão
+
+### Imutabilidade
+
+- Plano é criado pelo Extraction Planner
+- Entregue ao Temporal como definizione imutável
+- Temporal executa o plano sem modificá-lo
+- Qualquer mudança requer novo plano (novo consentimento ou reautorização)
+
+## Consequências
+
+### Positivas
+
+- **Traceability**: Cada execução pode ser rastreada até o plano que a gerou
+- **Replay**: Planos podem ser reexecutados para debugging
+- **Versionamento**: Schemas evoluem sem quebrar planos existentes
+- **Validação**: Planos podem ser validados contra o grafo de recursos antes da execução
+- **Observabilidade**: Cada nó do DAG é monitorado individualmente
+
+### Negativas
+
+- **Overhead**: Serialização protobuf adiciona latência mínima
+- **Complexidade**: DAGs complexos podem ser difíceis de visualizar
+- **Armazenamento**: Planos imutáveis consomem espaço (mitigado com TTL)
+
+### Mitigações
+
+- TTL de 30 dias para planos expirados
+- Dashboard de visualização de DAGs no Temporal UI
+- Validação automática de DAG antes de submeter ao Temporal
+
+## Referências
+
+- architecture.yaml → planes.execution.components.execution-plan
+- architecture.yaml → planes.execution.components.extraction-planner
+- architecture.yaml → invariants.INV03, INV07

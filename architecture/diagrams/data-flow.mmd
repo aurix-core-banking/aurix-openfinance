@@ -1,0 +1,14 @@
+graph LR
+    A[Raw Record] --> B[Canonicalization]
+    B --> C[Schema Validation]
+    C --> D[Data Quality]
+    D --> E[PII Classification]
+    E --> F[Lineage Registration]
+    F --> G[Publication]
+    
+    G --> H[Kafka Events]
+    G --> I[REST API]
+    G --> J[Data Products]
+    
+    style A fill:#f9f,stroke:#333
+    style G fill:#9f9,stroke:#333

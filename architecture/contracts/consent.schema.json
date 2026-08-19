@@ -1,0 +1,204 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aurix-platform.com/schemas/openfinance/consent/v1.schema.json",
+  "title": "Consent",
+  "description": "Open Finance consent record following BACEN COMEX 35.145",
+  "type": "object",
+  "required": ["id", "subject", "permissions", "resources", "purpose", "status", "version", "createdAt", "expiresAt"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique consent identifier"
+    },
+    "subject": {
+      "type": "object",
+      "required": ["type", "identifier"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["PF", "PJ"],
+          "description": "Subject type: PF (pessoa física) or PJ (pessoa jurídica)"
+        },
+        "identifier": {
+          "type": "string",
+          "description": "CPF or CNPJ"
+        },
+        "name": {
+          "type": "string",
+          "description": "Subject name"
+        }
+      },
+      "description": "Data subject (consent holder)"
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["resource", "actions"],
+        "properties": {
+          "resource": {
+            "type": "string",
+            "description": "Resource type (e.g., accounts, transactions, credit-cards)"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["READ", "READ_WRITE"]
+            },
+            "minItems": 1,
+            "description": "Allowed actions on this resource"
+          },
+          "conditions": {
+            "type": "object",
+            "properties": {
+              "dateRange": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "end": {
+                    "type": "string",
+                    "format": "date"
+                  }
+                }
+              },
+              "accounts": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Specific account IDs (empty = all accounts)"
+              }
+            },
+            "description": "Optional conditions for this permission"
+          }
+        }
+      },
+      "minItems": 1,
+      "description": "List of granted permissions"
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "path"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Resource type"
+          },
+          "path": {
+            "type": "string",
+            "description": "Resource access path in the data graph"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "description": "Discovered accessible resources"
+    },
+    "purpose": {
+      "type": "object",
+      "required": ["code", "description"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "CONSENT_BASED_SHARING",
+            "CREDIT_ANALYSIS",
+            "PORTFOLIO_MANAGEMENT",
+            "PERSONAL_FINANCIAL_MANAGEMENT",
+            "CREDIT_SERVICE_PROVISION",
+            "PRODUCT_RECOMMENDATION",
+            "OTHER"
+          ],
+          "description": "Purpose code per BACEN regulation"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable purpose description"
+        },
+        "additionalInfo": {
+          "type": "string",
+          "description": "Additional purpose details"
+        }
+      },
+      "description": "Purpose of data access"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["PENDING", "AUTHORIZED", "ACTIVE", "REVOKED", "EXPIRED", "REJECTED"],
+      "description": "Consent lifecycle status"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Consent version (incremented on updates)"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Consent creation timestamp (ISO 8601)"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last modification timestamp"
+    },
+    "authorizedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Authorization timestamp"
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Consent expiration timestamp"
+    },
+    "revokedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Revocation timestamp (if revoked)"
+    },
+    "participant": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Participant (third party) identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Participant name"
+        },
+        "organization": {
+          "type": "string",
+          "description": "Participant organization"
+        }
+      },
+      "description": "Third party requesting data access"
+    },
+    "dpopThumbprint": {
+      "type": "string",
+      "description": "DPoP proof thumbprint for sender-constrained tokens"
+    },
+    "signingAlgorithm": {
+      "type": "string",
+      "enum": ["ES256", "ES384", "ES512", "PS256", "PS384", "PS512"],
+      "description": "Algorithm used to sign the authorized context"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Additional consent metadata"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,18 @@
+sequenceDiagram
+    participant Temporal
+    participant Pipeline
+    participant Extractor
+    participant Policy as Policy Enforcement
+    participant Adapter
+    participant Source
+
+    Temporal->>Pipeline: Execute extraction activity
+    Pipeline->>Extractor: extract(context, resource)
+    Extractor->>Policy: Validate authorization
+    Policy-->>Extractor: Authorized
+    Extractor->>Adapter: Fetch raw data
+    Adapter->>Source: Query source system
+    Source-->>Adapter: Raw data
+    Adapter-->>Extractor: Raw data
+    Extractor-->>Pipeline: Raw record
+    Pipeline-->>Temporal: Extraction complete
