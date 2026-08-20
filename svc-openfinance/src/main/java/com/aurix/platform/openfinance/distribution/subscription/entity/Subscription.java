@@ -31,6 +31,15 @@ public class Subscription {
     @Column(nullable = false, length = 4000)
     private String events;
 
+    /**
+     * Segredo usado para assinar (HMAC-SHA256) o corpo de cada webhook entregue —
+     * gerado uma vez na criação, nunca reexposto após isso (só no momento da
+     * criação/rotação). O receptor usa o mesmo segredo para validar
+     * X-Webhook-Signature e confirmar origem + integridade da notificação.
+     */
+    @Column(nullable = false, length = 100)
+    private String webhookSecret;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private SubscriptionStatus status;
@@ -47,15 +56,25 @@ public class Subscription {
     }
 
     public Subscription(String subscriptionId, String participantId, String dataProductId,
-                        String callbackUrl, String events, LocalDateTime expiresAt) {
+                        String callbackUrl, String events, LocalDateTime expiresAt,
+                        String webhookSecret) {
         this.subscriptionId = subscriptionId;
         this.participantId = participantId;
         this.dataProductId = dataProductId;
         this.callbackUrl = callbackUrl;
         this.events = events;
+        this.webhookSecret = webhookSecret;
         this.status = SubscriptionStatus.ACTIVE;
         this.createdAt = LocalDateTime.now();
         this.expiresAt = expiresAt;
+    }
+
+    /**
+     * Gera um novo segredo, invalidando o anterior — usado na criação e em rotação.
+     */
+    public void rotateSecret(String newSecret) {
+        this.webhookSecret = newSecret;
+        this.updatedAt = LocalDateTime.now();
     }
 
     public boolean isExpired() {
@@ -115,6 +134,10 @@ public class Subscription {
 
     public void setEvents(String events) {
         this.events = events;
+    }
+
+    public String getWebhookSecret() {
+        return webhookSecret;
     }
 
     public SubscriptionStatus getStatus() {

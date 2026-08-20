@@ -59,4 +59,13 @@ public class SubscriptionController {
         service.unsubscribe(id);
         return ResponseEntity.noContent().build();
     }
+
+    /**
+     * Rotaciona o segredo de assinatura de webhook — invalida o anterior.
+     * O novo segredo só é exposto nesta resposta.
+     */
+    @PostMapping("/{id}/rotate-secret")
+    public ResponseEntity<Subscription> rotateSecret(@PathVariable String id) {
+        return ResponseEntity.ok(service.rotateSecret(id));
+    }
 }
