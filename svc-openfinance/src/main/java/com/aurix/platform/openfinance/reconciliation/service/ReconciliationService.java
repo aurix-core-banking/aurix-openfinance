@@ -1,5 +1,6 @@
 package com.aurix.platform.openfinance.reconciliation.service;
 
+import com.aurix.platform.openfinance.event.OpenFinanceEventPublisher;
 import com.aurix.platform.openfinance.reconciliation.entity.ReconciliationRecord;
 import com.aurix.platform.openfinance.reconciliation.entity.ReconciliationStatus;
 import com.aurix.platform.openfinance.reconciliation.repository.ReconciliationRecordRepository;
@@ -26,9 +27,12 @@ public class ReconciliationService {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private final ReconciliationRecordRepository reconciliationRepository;
+    private final OpenFinanceEventPublisher eventPublisher;
 
-    public ReconciliationService(ReconciliationRecordRepository reconciliationRepository) {
+    public ReconciliationService(ReconciliationRecordRepository reconciliationRepository,
+                                  OpenFinanceEventPublisher eventPublisher) {
         this.reconciliationRepository = reconciliationRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -37,6 +41,7 @@ public class ReconciliationService {
     public ReconciliationResult reconciliar(String planId, Map<String, NodeExpectedCounts> expectedCounts,
                                             Map<String, Integer> actualCounts) {
         log.info("Iniciando reconciliação para plano: {}", planId);
+        eventPublisher.publishReconciliationTriggered(planId, planId);
 
         List<ReconciliationRecord> records = new ArrayList<>();
         List<String> divergences = new ArrayList<>();
@@ -99,6 +104,11 @@ public class ReconciliationService {
         result.setHasDivergences(!divergences.isEmpty());
         result.setReconciledAt(LocalDateTime.now());
 
+        if (!divergences.isEmpty()) {
+            eventPublisher.publishReconciliationDivergenceDetected(planId, planId,
+                    String.join("; ", divergences));
+        }
+
         log.info("Reconciliação concluída - plano: {}, divergências: {}", planId, divergences.size());
 
         return result;
@@ -135,6 +145,7 @@ public class ReconciliationService {
             result.setRecordsRepaired(registrosReparados);
             result.setRepairedAt(LocalDateTime.now());
 
+            eventPublisher.publishReconciliationRepaired(record.getPlanId(), record.getPlanId());
             log.info("Reparo concluído - reconciliação: {}, registros reparados: {}", reconciliationId, registrosReparados);
             return result;
         } catch (Exception e) {
