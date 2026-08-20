@@ -22,6 +22,14 @@ Arquitetura completa, ADRs e catálogo de eventos em [`architecture/`](architect
 
 ## Arquitetura em 5 planos
 
+![Diagrama de arquitetura-alvo em camadas](architecture/diagrams/arquitetura-em-camadas.png)
+
+> Este diagrama é a **visão-alvo** (mesma referência dos ADRs), não uma foto do estado atual —
+> por exemplo, a camada de segurança ali representa mTLS/DPoP completos (ainda pendente, ver
+> [issue #1](https://github.com/aurix-core-banking/aurix-openfinance/issues/1)) e a publicação
+> sugere um data warehouse dedicado (hoje um Postgres pragmático, ver `DataProductService`).
+> Para o que já está implementado de fato em cada camada, veja a tabela abaixo.
+
 | Plano | O que faz | Pacotes principais |
 |---|---|---|
 | Consent Plane | Consentimento, descoberta de recursos, policy engine (avaliação real, não simulada) | `service` (Consentimento), `discovery`, `policy` |
