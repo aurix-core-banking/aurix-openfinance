@@ -6,11 +6,17 @@ import com.aurix.platform.openfinance.distribution.subscription.repository.Subsc
 import com.aurix.platform.openfinance.distribution.subscription.dto.SubscriptionRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -22,11 +28,17 @@ import java.util.UUID;
 public class SubscriptionService {
 
     private static final Logger log = LoggerFactory.getLogger(SubscriptionService.class);
+    private static final int WEBHOOK_TIMEOUT_MS = 5000;
 
     private final SubscriptionRepository repository;
+    private final RestClient restClient;
 
     public SubscriptionService(SubscriptionRepository repository) {
         this.repository = repository;
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(WEBHOOK_TIMEOUT_MS);
+        requestFactory.setReadTimeout(WEBHOOK_TIMEOUT_MS);
+        this.restClient = RestClient.builder().requestFactory(requestFactory).build();
     }
 
     /**
@@ -120,19 +132,33 @@ public class SubscriptionService {
     }
 
     /**
-     * Entrega webhook com retry.
+     * Entrega webhook com retry — POST HTTP real via RestClient. Antes disso o
+     * "envio" era só um log.info sem nenhuma requisição de verdade, então o
+     * retry nunca disparava (nada podia falhar).
      */
     private void deliverWebhook(Subscription subscription, String eventType, Object payload) {
         int maxRetries = 3;
         int attempt = 0;
 
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("eventType", eventType);
+        body.put("subscriptionId", subscription.getSubscriptionId());
+        body.put("dataProductId", subscription.getDataProductId());
+        body.put("payload", payload);
+
         while (attempt < maxRetries) {
             try {
-                // Implementacao concreta: HTTP POST para callbackUrl
-                log.info("Webhook enviado para {} (tentativa {}): evento={}",
+                restClient.post()
+                        .uri(subscription.getCallbackUrl())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(body)
+                        .retrieve()
+                        .toBodilessEntity();
+
+                log.info("Webhook entregue para {} (tentativa {}): evento={}",
                         subscription.getCallbackUrl(), attempt + 1, eventType);
                 return;
-            } catch (Exception e) {
+            } catch (RestClientException e) {
                 attempt++;
                 log.warn("Falha ao enviar webhook para {} (tentativa {}): {}",
                         subscription.getCallbackUrl(), attempt, e.getMessage());
