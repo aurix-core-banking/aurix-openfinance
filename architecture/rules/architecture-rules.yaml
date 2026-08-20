@@ -211,7 +211,7 @@ rules:
   - id: RULE-019
     name: "Kafka topic naming"
     severity: MEDIUM
-    description: "Topics Kafka devem seguir padrão openfinance.{domain}.{entity}.{event}.{version}"
+    description: "Topics Kafka devem seguir padrão {domain}.{entity}.{action}.{version} (ver architecture/events.yaml#namingConvention) — sem prefixo openfinance., já que o event bus é dedicado a este módulo"
     check: |
       architecture.planes.distribution.channels CONTAINS record where:
         record.event-streaming.topics_pattern ==

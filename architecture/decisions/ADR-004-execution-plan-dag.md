@@ -20,7 +20,15 @@ O plano de execução precisa ser:
 
 ## Decisão
 
-O Execution Plan é um **DAG imutável** serializado em **Protocol Buffers**:
+O Execution Plan é um **DAG imutável**. A serialização de transporte (entre o
+Extraction Planner e o Temporal Workflow) é **JSON**, persistida em **PostgreSQL/JPA**
+(`aurix.execution_plans`, `aurix.plan_nodes`, `aurix.plan_edges`) e validada contra
+`architecture/contracts/execution-plan.schema.json` (JSON Schema Draft-07) — não
+Protocol Buffers. A versão original desta ADR previa protobuf + Confluent Schema
+Registry; a implementação real optou por JSON/JPA por simplicidade operacional no
+ambiente dev/local (sem exigir um Schema Registry rodando) e porque o contrato já é
+validado via JSON Schema. Migrar para protobuf fica como extensão futura caso o
+volume/latência exijam serialização binária — não é uma divergência não avaliada.
 
 ### Estrutura do Plano
 
@@ -46,9 +54,9 @@ ExecutionPlan
 
 ### Serialização
 
-- **Formato**: Protocol Buffers (protobuf)
-- **Schema Registry**: Confluent Schema Registry com compatibilidade BACKWARD
-- **Versionamento**: Cada mudança de schema cria nova versão
+- **Formato**: JSON, validado contra `architecture/contracts/execution-plan.schema.json`
+- **Persistência**: PostgreSQL/JPA (`aurix.execution_plans`/`plan_nodes`/`plan_edges`)
+- **Versionamento**: Cada mudança de schema cria nova versão do JSON Schema
 
 ### Imutabilidade
 
@@ -69,7 +77,8 @@ ExecutionPlan
 
 ### Negativas
 
-- **Overhead**: Serialização protobuf adiciona latência mínima
+- **Overhead**: JSON é mais verboso que protobuf (aceito em troca de não depender de
+  Schema Registry no ambiente dev/local)
 - **Complexidade**: DAGs complexos podem ser difíceis de visualizar
 - **Armazenamento**: Planos imutáveis consomem espaço (mitigado com TTL)
 

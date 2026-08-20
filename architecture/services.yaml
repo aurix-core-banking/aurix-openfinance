@@ -10,7 +10,7 @@ services:
   consent-service:
     ownership: openfinance-team
     layer: consent-plane
-    port: 8092
+    port: 8096
     database: aurix_db
     schema: aurix
     language: java-25
@@ -68,7 +68,7 @@ services:
   resource-discovery:
     ownership: openfinance-team
     layer: consent-plane
-    port: 8092
+    port: 8096
     database: aurix_db
     schema: aurix
     
@@ -99,7 +99,7 @@ services:
   policy-engine:
     ownership: openfinance-team
     layer: consent-plane
-    port: 8092
+    port: 8096
     database: aurix_db
     schema: aurix
     
@@ -133,7 +133,7 @@ services:
   authorized-context-service:
     ownership: openfinance-team
     layer: consent-plane
-    port: 8092
+    port: 8096
     database: aurix_db
     schema: aurix
     
@@ -163,7 +163,7 @@ services:
   extraction-planner:
     ownership: openfinance-team
     layer: execution-plane
-    port: 8092
+    port: 8096
     database: aurix_db
     schema: aurix
     
@@ -229,7 +229,7 @@ services:
   reconciliation:
     ownership: openfinance-team
     layer: execution-plane
-    port: 8092
+    port: 8096
     database: aurix_db
     schema: aurix
     
@@ -256,7 +256,7 @@ services:
   data-pipeline:
     ownership: openfinance-team
     layer: data-plane
-    port: 8092
+    port: 8096
     
     responsibilities:
       - Canonicalize raw data
@@ -308,7 +308,7 @@ services:
   data-products:
     ownership: openfinance-team
     layer: distribution-plane
-    port: 8092
+    port: 8096
     
     responsibilities:
       - Materialize data products
@@ -332,7 +332,7 @@ services:
   subscriptions:
     ownership: openfinance-team
     layer: distribution-plane
-    port: 8092
+    port: 8096
     
     responsibilities:
       - Manage webhook subscriptions

@@ -9,7 +9,7 @@ runtime:
 
   services:
     svc-openfinance:
-      port: 8092
+      port: 8096
       healthCheck: /actuator/health
       replicas: 3
       resources:
@@ -28,8 +28,11 @@ runtime:
     ports:
       - "7233:7233"
     ui:
-      image: temporalio/ui:2.21.0
-      port: "8081"
+      # 2.26.0 / 8098 para bater com o que aurix-infrastructure/docker-compose.yml
+      # realmente sobe (não 2.21.0/8081 — que colidia com o dashboard do traefik
+      # e com o Schema Registry, ambos também na 8081).
+      image: temporalio/ui:2.26.0
+      port: "8098"
     taskQueues:
       - openfinance-extraction
       - openfinance-reconciliation

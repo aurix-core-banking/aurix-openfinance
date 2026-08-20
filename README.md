@@ -50,7 +50,7 @@ Spec disponível em `/openapi/aurix-openfinance.yaml` e via Swagger UI em `/swag
 
 | Variável | Default | Descrição |
 |----------|---------|-----------|
-| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/aurix_openfinance` | URL do PostgreSQL |
+| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/aurix_db` | URL do PostgreSQL |
 | `SPRING_DATASOURCE_USERNAME` | `aurix_user` | Usuário do banco |
 | `SPRING_DATASOURCE_PASSWORD` | `aurix_dev_password` | Senha do banco |
 | `AURIX_BACEN_URL` | `http://localhost:8095` | URL do mock BACEN |
