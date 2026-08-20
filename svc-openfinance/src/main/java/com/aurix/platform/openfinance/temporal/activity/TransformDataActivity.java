@@ -14,6 +14,8 @@ public interface TransformDataActivity {
     class TransformRequest {
         private String nodeId;
         private String resource;
+        private String consentId;
+        private String executionPlanId;
         private String rawData;
         private int recordCount;
 
@@ -26,6 +28,22 @@ public interface TransformDataActivity {
 
         public void setNodeId(String nodeId) {
             this.nodeId = nodeId;
+        }
+
+        public String getConsentId() {
+            return consentId;
+        }
+
+        public void setConsentId(String consentId) {
+            this.consentId = consentId;
+        }
+
+        public String getExecutionPlanId() {
+            return executionPlanId;
+        }
+
+        public void setExecutionPlanId(String executionPlanId) {
+            this.executionPlanId = executionPlanId;
         }
 
         public String getResource() {
@@ -57,6 +75,7 @@ public interface TransformDataActivity {
         private String nodeId;
         private int recordCount;
         private String canonicalData;
+        private String lineageId;
         private boolean success;
         private String errorMessage;
 
@@ -69,6 +88,14 @@ public interface TransformDataActivity {
 
         public void setNodeId(String nodeId) {
             this.nodeId = nodeId;
+        }
+
+        public String getLineageId() {
+            return lineageId;
+        }
+
+        public void setLineageId(String lineageId) {
+            this.lineageId = lineageId;
         }
 
         public int getRecordCount() {

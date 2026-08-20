@@ -15,6 +15,7 @@ public interface PublishDataActivity {
         private String nodeId;
         private String resource;
         private String canonicalData;
+        private String lineageId;
         private int recordCount;
 
         public PublishRequest() {
@@ -26,6 +27,14 @@ public interface PublishDataActivity {
 
         public void setNodeId(String nodeId) {
             this.nodeId = nodeId;
+        }
+
+        public String getLineageId() {
+            return lineageId;
+        }
+
+        public void setLineageId(String lineageId) {
+            this.lineageId = lineageId;
         }
 
         public String getResource() {

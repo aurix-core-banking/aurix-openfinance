@@ -135,7 +135,7 @@ public class DataExtractionWorkflowImpl implements DataExtractionWorkflow {
                 executingNodes.add(nodeId);
 
                 Promise<ExtractionResult.NodeResult> promise = Async.function(() -> {
-                    return executarNode(node);
+                    return executarNode(plano, node);
                 });
                 promises.add(promise);
             }
@@ -188,13 +188,15 @@ public class DataExtractionWorkflowImpl implements DataExtractionWorkflow {
         return result;
     }
 
-    private ExtractionResult.NodeResult executarNode(ExecutionPlanRequest.SerializableNode node) {
+    private ExtractionResult.NodeResult executarNode(ExecutionPlanRequest plano,
+            ExecutionPlanRequest.SerializableNode node) {
         long nodeStart = System.currentTimeMillis();
         log.info("Executando node: {} (recurso: {})", node.getNodeId(), node.getResource());
 
         ExtractDataActivity.ExtractRequest extractRequest = new ExtractDataActivity.ExtractRequest();
         extractRequest.setNodeId(node.getNodeId());
         extractRequest.setResource(node.getResource());
+        extractRequest.setConsentId(plano.getConsentId());
         extractRequest.setIdempotencyKey(node.getIdempotencyKey());
         extractRequest.setTimeoutSeconds(node.getTimeoutSeconds());
 
@@ -203,6 +205,8 @@ public class DataExtractionWorkflowImpl implements DataExtractionWorkflow {
         TransformDataActivity.TransformRequest transformRequest = new TransformDataActivity.TransformRequest();
         transformRequest.setNodeId(node.getNodeId());
         transformRequest.setResource(node.getResource());
+        transformRequest.setConsentId(plano.getConsentId());
+        transformRequest.setExecutionPlanId(plano.getPlanId());
         transformRequest.setRawData(extractResult.getRawData());
         transformRequest.setRecordCount(extractResult.getRecordCount());
 
@@ -212,6 +216,7 @@ public class DataExtractionWorkflowImpl implements DataExtractionWorkflow {
         publishRequest.setNodeId(node.getNodeId());
         publishRequest.setResource(node.getResource());
         publishRequest.setCanonicalData(transformResult.getCanonicalData());
+        publishRequest.setLineageId(transformResult.getLineageId());
         publishRequest.setRecordCount(transformResult.getRecordCount());
 
         PublishDataActivity.PublishResult publishResult = publishActivity.publish(publishRequest);

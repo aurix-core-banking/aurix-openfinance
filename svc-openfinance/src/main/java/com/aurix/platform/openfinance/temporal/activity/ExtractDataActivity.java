@@ -14,6 +14,7 @@ public interface ExtractDataActivity {
     class ExtractRequest {
         private String nodeId;
         private String resource;
+        private String consentId;
         private String idempotencyKey;
         private int timeoutSeconds;
 
@@ -26,6 +27,14 @@ public interface ExtractDataActivity {
 
         public void setNodeId(String nodeId) {
             this.nodeId = nodeId;
+        }
+
+        public String getConsentId() {
+            return consentId;
+        }
+
+        public void setConsentId(String consentId) {
+            this.consentId = consentId;
         }
 
         public String getResource() {
