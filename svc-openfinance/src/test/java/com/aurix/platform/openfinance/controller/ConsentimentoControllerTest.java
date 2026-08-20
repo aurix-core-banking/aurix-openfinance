@@ -4,12 +4,13 @@ import com.aurix.platform.openfinance.dto.ConsentimentoRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -32,6 +33,7 @@ class ConsentimentoControllerTest {
         request.setPermissions(java.util.List.of("accounts", "transactions"));
 
         mockMvc.perform(post("/open-finance/v1/consents")
+                .with(jwt())
                 .header("X-User-Id", "1")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -47,6 +49,7 @@ class ConsentimentoControllerTest {
         request.setInstitutionCode("AURIX");
 
         mockMvc.perform(post("/open-finance/v1/consents")
+                .with(jwt())
                 .header("X-User-Id", "1")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -60,6 +63,7 @@ class ConsentimentoControllerTest {
         request.setInstitutionCode("AURIX");
 
         String responseBody = mockMvc.perform(post("/open-finance/v1/consents")
+                .with(jwt())
                 .header("X-User-Id", "1")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -67,7 +71,7 @@ class ConsentimentoControllerTest {
 
         String consentId = objectMapper.readTree(responseBody).get("consentId").asText();
 
-        mockMvc.perform(get("/open-finance/v1/consents/" + consentId))
+        mockMvc.perform(get("/open-finance/v1/consents/" + consentId).with(jwt()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.consentId").value(consentId))
             .andExpect(jsonPath("$.status").value("AWAITING_AUTHORISATION"));
@@ -80,6 +84,7 @@ class ConsentimentoControllerTest {
         request.setInstitutionCode("AURIX");
 
         String responseBody = mockMvc.perform(post("/open-finance/v1/consents")
+                .with(jwt())
                 .header("X-User-Id", "1")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -87,7 +92,7 @@ class ConsentimentoControllerTest {
 
         String consentId = objectMapper.readTree(responseBody).get("consentId").asText();
 
-        mockMvc.perform(post("/open-finance/v1/consents/" + consentId + "/authorise"))
+        mockMvc.perform(post("/open-finance/v1/consents/" + consentId + "/authorise").with(jwt()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("AUTHORISED"));
     }
@@ -99,6 +104,7 @@ class ConsentimentoControllerTest {
         request.setInstitutionCode("AURIX");
 
         String responseBody = mockMvc.perform(post("/open-finance/v1/consents")
+                .with(jwt())
                 .header("X-User-Id", "1")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -107,6 +113,7 @@ class ConsentimentoControllerTest {
         String consentId = objectMapper.readTree(responseBody).get("consentId").asText();
 
         mockMvc.perform(post("/open-finance/v1/consents/" + consentId + "/revoke")
+                .with(jwt())
                 .param("motivo", "Cliente solicitou"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("REVOKED"));
@@ -114,7 +121,7 @@ class ConsentimentoControllerTest {
 
     @Test
     void deveRetornar404ParaConsentimentoInexistente() throws Exception {
-        mockMvc.perform(get("/open-finance/v1/consents/inexistente-123"))
+        mockMvc.perform(get("/open-finance/v1/consents/inexistente-123").with(jwt()))
             .andExpect(status().isBadRequest());
     }
 }

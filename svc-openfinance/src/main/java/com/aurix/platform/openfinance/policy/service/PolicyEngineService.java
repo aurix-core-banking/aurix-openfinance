@@ -1,10 +1,16 @@
 package com.aurix.platform.openfinance.policy.service;
 
+import com.aurix.platform.openfinance.discovery.entity.ResourceGraph;
+import com.aurix.platform.openfinance.discovery.entity.ResourceNode;
+import com.aurix.platform.openfinance.discovery.repository.ResourceGraphRepository;
+import com.aurix.platform.openfinance.discovery.repository.ResourceNodeRepository;
+import com.aurix.platform.openfinance.entity.Consentimento;
 import com.aurix.platform.openfinance.policy.dto.PolicyDecisionResponse;
 import com.aurix.platform.openfinance.policy.dto.PolicyEvaluationRequest;
 import com.aurix.platform.openfinance.policy.entity.*;
 import com.aurix.platform.openfinance.policy.repository.PolicyDecisionRepository;
 import com.aurix.platform.openfinance.policy.repository.PolicyRuleRepository;
+import com.aurix.platform.openfinance.repository.ConsentimentoRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -12,8 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-import java.util.UUID;
+import java.util.Optional;
 
 /**
  * Motor de políticas — ÚNICO ponto de decisão de autorização (INV04).
@@ -26,11 +33,20 @@ public class PolicyEngineService {
 
     private final PolicyRuleRepository ruleRepository;
     private final PolicyDecisionRepository decisionRepository;
+    private final ConsentimentoRepository consentimentoRepository;
+    private final ResourceGraphRepository resourceGraphRepository;
+    private final ResourceNodeRepository resourceNodeRepository;
 
     public PolicyEngineService(PolicyRuleRepository ruleRepository,
-                               PolicyDecisionRepository decisionRepository) {
+                               PolicyDecisionRepository decisionRepository,
+                               ConsentimentoRepository consentimentoRepository,
+                               ResourceGraphRepository resourceGraphRepository,
+                               ResourceNodeRepository resourceNodeRepository) {
         this.ruleRepository = ruleRepository;
         this.decisionRepository = decisionRepository;
+        this.consentimentoRepository = consentimentoRepository;
+        this.resourceGraphRepository = resourceGraphRepository;
+        this.resourceNodeRepository = resourceNodeRepository;
     }
 
     /**
@@ -138,25 +154,60 @@ public class PolicyEngineService {
         }
     }
 
+    /**
+     * INV01 "No consent, no execution": o consentimento precisa existir, estar
+     * AUTHORISED e não expirado — não basta o campo estar preenchido.
+     */
     private boolean validateConsent(PolicyEvaluationRequest request) {
         if (request.getConsentId() == null || request.getConsentId().isBlank()) {
             return false;
         }
-        return true;
+        Optional<Consentimento> consentimento = consentimentoRepository.findByConsentId(request.getConsentId());
+        if (consentimento.isEmpty()) {
+            return false;
+        }
+        Consentimento c = consentimento.get();
+        if (c.getStatus() != Consentimento.StatusConsentimento.AUTHORISED) {
+            return false;
+        }
+        return c.getDataExpiracao() != null && c.getDataExpiracao().isAfter(LocalDateTime.now());
     }
 
+    /**
+     * INV02 "No authorized resource, no data access": o recurso pedido precisa
+     * estar presente e ativo no grafo de recursos descoberto para este consentimento.
+     */
     private boolean validateResourceAccess(PolicyEvaluationRequest request) {
-        if (request.getResourceId() == null || request.getResourceId().isBlank()) {
+        if (request.getResourceId() == null || request.getResourceId().isBlank()
+                || request.getConsentId() == null) {
             return false;
         }
-        return true;
+        Optional<ResourceGraph> graph = resourceGraphRepository.findLatestByConsentId(request.getConsentId());
+        if (graph.isEmpty()) {
+            return false;
+        }
+        List<ResourceNode> activeNodes = resourceNodeRepository
+                .findByGraphIdAndActiveTrue(graph.get().getGraphId());
+        return activeNodes.stream().anyMatch(node ->
+                request.getResourceId().equals(node.getNodeId())
+                        || request.getResourceId().equals(node.getPath()));
     }
 
+    /**
+     * O propósito/permissão requisitado precisa estar entre as permissões
+     * efetivamente concedidas no consentimento (não apenas presente na requisição).
+     */
     private boolean validatePurpose(PolicyEvaluationRequest request) {
-        if (request.getPurpose() == null || request.getPurpose().isBlank()) {
+        if (request.getPurpose() == null || request.getPurpose().isBlank()
+                || request.getConsentId() == null) {
             return false;
         }
-        return true;
+        Optional<Consentimento> consentimento = consentimentoRepository.findByConsentId(request.getConsentId());
+        if (consentimento.isEmpty() || consentimento.get().getPermissions() == null) {
+            return false;
+        }
+        List<String> granted = Arrays.asList(consentimento.get().getPermissions().split(","));
+        return granted.stream().anyMatch(p -> p.trim().equalsIgnoreCase(request.getPurpose().trim()));
     }
 
     private boolean validateToken(PolicyEvaluationRequest request) {
@@ -166,20 +217,30 @@ public class PolicyEngineService {
         return true;
     }
 
+    /**
+     * RATE-002 (policies.yaml): limite por consentimento, não contador global do
+     * sistema inteiro — senão um único cliente barulhento bloquearia todos os outros.
+     */
     private boolean checkRateLimit(PolicyEvaluationRequest request) {
         if (request.getConsentId() == null) {
             return false;
         }
         LocalDateTime oneMinuteAgo = LocalDateTime.now().minusMinutes(1);
-        long recentDenials = decisionRepository.countDecisionsSince(
-                oneMinuteAgo, PolicyDecisionType.DENIED);
-        return recentDenials < 100;
+        long recentDecisions = decisionRepository
+                .findByConsentIdOrderByEvaluatedAtDesc(request.getConsentId())
+                .stream()
+                .filter(d -> d.getEvaluatedAt() != null && d.getEvaluatedAt().isAfter(oneMinuteAgo))
+                .count();
+        return recentDecisions < 100;
     }
 
     private boolean checkTimeConstraint(PolicyEvaluationRequest request) {
         if (request.getConsentId() == null) {
             return false;
         }
-        return true;
+        Optional<Consentimento> consentimento = consentimentoRepository.findByConsentId(request.getConsentId());
+        return consentimento.isPresent()
+                && consentimento.get().getDataExpiracao() != null
+                && consentimento.get().getDataExpiracao().isAfter(LocalDateTime.now());
     }
 }

@@ -34,6 +34,22 @@ spring:
         spring.json.trusted.packages: "com.aurix.platform.shared.event"
         spring.json.use.type.headers: false
         spring.json.use.type.info: true
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8443/realms/aurix}
+  cloud:
+    vault:
+      enabled: ${AURIX_VAULT_ENABLED:false}
+
+temporal:
+  connection:
+    target: ${TEMPORAL_ADDRESS:localhost:7233}
+    namespace: ${TEMPORAL_NAMESPACE:aurix}
 
 management:
   endpoints:
@@ -52,6 +68,10 @@ springdoc:
     path: /swagger-ui.html
 
 aurix:
+  security:
+    encryption:
+      # Dev/local apenas — em produção vem do Vault (spring.cloud.vault.*), nunca hardcoded.
+      key-base64: ${AURIX_PII_ENCRYPTION_KEY_BASE64:GLHAnnwRPZ6wNYIEmfn1fBGY2SVYriekuBgs7waUtuk=}
   openfinance:
     bacen-url: ${AURIX_BACEN_URL:http://localhost:8095}
     consent-max-duration-days: ${AURIX_OF_CONSENT_MAX_DAYS:365}

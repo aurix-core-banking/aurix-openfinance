@@ -3,7 +3,7 @@ server:
 
 spring:
   datasource:
-    url: jdbc:h2:mem:aurix_openfinance_test;MODE=POSTGRESQL
+    url: jdbc:h2:mem:aurix_openfinance_test;MODE=POSTGRESQL;INIT=CREATE SCHEMA IF NOT EXISTS AURIX\;CREATE SCHEMA IF NOT EXISTS AURIX_OPENFINANCE
     driver-class-name: org.h2.Driver
     username: sa
     password:
@@ -16,12 +16,18 @@ spring:
         dialect: org.hibernate.dialect.H2Dialect
   flyway:
     enabled: false
+  cloud:
+    vault:
+      enabled: false
   kafka:
     bootstrap-servers: localhost:9092
     consumer:
       group-id: aurix-openfinance-test
 
 aurix:
+  security:
+    encryption:
+      key-base64: 8zs4BDTpXvMXp+VZmV2kvO6fbOEEjCx7RoFJ6itiW9s=
   openfinance:
     bacen-url: http://localhost:8095
     consent-max-duration-days: 30

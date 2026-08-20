@@ -1,6 +1,7 @@
 package com.aurix.platform.openfinance.extractor;
 
 import com.aurix.platform.openfinance.context.entity.AuthorizedContext;
+import com.aurix.platform.openfinance.extractor.adapter.LoanSourceAdapter;
 import com.aurix.platform.openfinance.extractor.dto.RawData;
 import com.aurix.platform.openfinance.extractor.dto.ResourceDescriptor;
 import com.aurix.platform.openfinance.extractor.dto.ResourceType;
@@ -11,22 +12,27 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Extrai dados de emprestimos do core banking.
+ * Extrai empréstimos via {@link LoanSourceAdapter}.
  * Suporta: LOANS, LOAN_INSTALLMENTS.
  */
 @Component
 public class CoreLoanExtractor extends BaseExtractor {
 
+    private final LoanSourceAdapter sourceAdapter;
+
+    public CoreLoanExtractor(LoanSourceAdapter sourceAdapter) {
+        this.sourceAdapter = sourceAdapter;
+    }
+
     @Override
     protected RawData doExtract(AuthorizedContext context, ResourceDescriptor resource) {
+        List<LoanSourceAdapter.Loan> emprestimos = sourceAdapter.findLoans(context.getConsentId());
+
         return RawData.builder()
                 .resourceType(resource.getResourceType())
                 .contextId(context.getContextId())
-                .payload(Map.of(
-                        "emprestimos", List.of(),
-                        "parcelas", List.of()
-                ))
-                .recordCount(0)
+                .payload(Map.of("emprestimos", emprestimos))
+                .recordCount(emprestimos.size())
                 .extractedAt(java.time.LocalDateTime.now())
                 .build();
     }
@@ -41,7 +47,7 @@ public class CoreLoanExtractor extends BaseExtractor {
     public ExtractorCapabilities getCapabilities() {
         return ExtractorCapabilities.builder()
                 .name("CoreLoanExtractor")
-                .description("Extracao de emprestimos e parcelas do core banking")
+                .description("Extração de empréstimos via LoanSourceAdapter")
                 .supportedResourceTypes(List.of(
                         ResourceType.LOANS,
                         ResourceType.LOAN_INSTALLMENTS

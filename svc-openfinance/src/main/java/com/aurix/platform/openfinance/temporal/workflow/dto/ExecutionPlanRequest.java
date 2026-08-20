@@ -1,4 +1,4 @@
-package com.aurix.platform.openfinance.temporal.workflow;
+package com.aurix.platform.openfinance.temporal.workflow.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 

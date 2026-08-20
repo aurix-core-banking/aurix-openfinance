@@ -1,5 +1,6 @@
 package com.aurix.platform.openfinance.temporal.workflow;
 
+import com.aurix.platform.openfinance.temporal.workflow.dto.ExecutionPlanRequest;
 import com.aurix.platform.openfinance.temporal.activity.ExtractDataActivity;
 import com.aurix.platform.openfinance.temporal.activity.PublishDataActivity;
 import com.aurix.platform.openfinance.temporal.activity.TransformDataActivity;

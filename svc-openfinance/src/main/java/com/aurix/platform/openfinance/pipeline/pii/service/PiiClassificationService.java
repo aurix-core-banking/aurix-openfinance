@@ -6,6 +6,7 @@ import com.aurix.platform.openfinance.pipeline.pii.entity.PiiResult.PiiField;
 import com.aurix.platform.openfinance.pipeline.pii.entity.PiiResult.PiiField.ProtectionStrategy;
 import com.aurix.platform.openfinance.pipeline.pii.entity.PiiType;
 import com.aurix.platform.openfinance.pipeline.pii.entity.PiiType.SensitivityLevel;
+import com.aurix.platform.shared.crypto.PiiEncryptor;
 import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -24,6 +25,12 @@ import java.util.regex.Pattern;
 public class PiiClassificationService {
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PiiClassificationService.class);
+
+    private final PiiEncryptor piiEncryptor;
+
+    public PiiClassificationService(final PiiEncryptor piiEncryptor) {
+        this.piiEncryptor = piiEncryptor;
+    }
 
     /**
      * Padrão regex para CPF: 11 dígitos.
@@ -280,16 +287,17 @@ public class PiiClassificationService {
     }
 
     /**
-     * Criptografa um valor com AES-256 (simulação).
+     * Criptografa um valor com AES/GCM real via {@link PiiEncryptor} (aurix-shared) —
+     * chave configurada em {@code aurix.security.encryption.key-base64}. Sem a chave
+     * configurada, {@link PiiEncryptor} retorna o valor original (ver seu próprio log
+     * de warning), nunca um Base64 disfarçado de criptografia.
      *
      * @param value   valor a criptografar.
      * @param piiType tipo PII.
-     * @return valor criptografado (token base64 simulado).
+     * @return valor criptografado.
      */
     private String encrypt(final String value, final PiiType piiType) {
-        // Em produção, utilizar PiiEncryptor do aurix-shared
-        String prefix = "ENC:";
-        return prefix + java.util.Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
+        return piiEncryptor.encrypt(value);
     }
 
     /**

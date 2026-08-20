@@ -1,6 +1,7 @@
 package com.aurix.platform.openfinance.extractor;
 
 import com.aurix.platform.openfinance.context.entity.AuthorizedContext;
+import com.aurix.platform.openfinance.extractor.adapter.PixSourceAdapter;
 import com.aurix.platform.openfinance.extractor.dto.RawData;
 import com.aurix.platform.openfinance.extractor.dto.ResourceDescriptor;
 import com.aurix.platform.openfinance.extractor.dto.ResourceType;
@@ -11,22 +12,28 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Extrai dados de PIX do core banking.
+ * Extrai transações PIX via {@link PixSourceAdapter}.
  * Suporta: PIX_KEYS, PIX_TRANSACTIONS.
  */
 @Component
 public class CorePixExtractor extends BaseExtractor {
 
+    private final PixSourceAdapter sourceAdapter;
+
+    public CorePixExtractor(PixSourceAdapter sourceAdapter) {
+        this.sourceAdapter = sourceAdapter;
+    }
+
     @Override
     protected RawData doExtract(AuthorizedContext context, ResourceDescriptor resource) {
+        List<PixSourceAdapter.PixTransaction> transacoesPix =
+                sourceAdapter.findPixTransactions(context.getConsentId());
+
         return RawData.builder()
                 .resourceType(resource.getResourceType())
                 .contextId(context.getContextId())
-                .payload(Map.of(
-                        "chaves_pix", List.of(),
-                        "transacoes_pix", List.of()
-                ))
-                .recordCount(0)
+                .payload(Map.of("transacoes_pix", transacoesPix))
+                .recordCount(transacoesPix.size())
                 .extractedAt(java.time.LocalDateTime.now())
                 .build();
     }
@@ -41,7 +48,7 @@ public class CorePixExtractor extends BaseExtractor {
     public ExtractorCapabilities getCapabilities() {
         return ExtractorCapabilities.builder()
                 .name("CorePixExtractor")
-                .description("Extracao de chaves PIX e transacoes PIX")
+                .description("Extração de transações PIX via PixSourceAdapter")
                 .supportedResourceTypes(List.of(
                         ResourceType.PIX_KEYS,
                         ResourceType.PIX_TRANSACTIONS

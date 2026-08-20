@@ -21,7 +21,7 @@ import java.util.UUID;
 @Service
 public class SubscriptionService {
 
-    private static final Logger log = LoggerFactory.getLogger(SubscriptionService.class));
+    private static final Logger log = LoggerFactory.getLogger(SubscriptionService.class);
 
     private final SubscriptionRepository repository;
 

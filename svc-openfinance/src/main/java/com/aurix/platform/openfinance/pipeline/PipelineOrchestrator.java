@@ -68,10 +68,12 @@ public class PipelineOrchestrator {
      * @param raw             registro bruto de entrada.
      * @param type            tipo de recurso.
      * @param executionPlanId ID do plano de execução.
+     * @param consentId       ID do consentimento que autorizou este dado (INV03).
+     * @param resourceId      ID do recurso compartilhado (INV03).
      * @return resultado do pipeline.
      */
     public PipelineResult execute(final RawRecord raw, final ResourceType type,
-            final String executionPlanId) {
+            final String executionPlanId, final String consentId, final String resourceId) {
         log.info("Iniciando pipeline: recordId={}, tipo={}, plan={}",
                 raw.getRecordId(), type, executionPlanId);
 
@@ -134,7 +136,7 @@ public class PipelineOrchestrator {
         LineageRecord lineage;
         try {
             LineageRequest request = new LineageRequest(
-                    null, null, executionPlanId, null,
+                    consentId, resourceId, executionPlanId, null,
                     pipelineExecutionId, raw.getRecordId(),
                     canonical.getCanonicalId(), null);
             lineage = lineageService.registerLineage(request);

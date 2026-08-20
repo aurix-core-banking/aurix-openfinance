@@ -1,49 +1,56 @@
 package com.aurix.platform.openfinance.temporal.worker;
 
-import com.aurix.platform.openfinance.temporal.activity.ExtractDataActivity;
 import com.aurix.platform.openfinance.temporal.activity.ExtractDataActivityImpl;
-import com.aurix.platform.openfinance.temporal.activity.PublishDataActivity;
 import com.aurix.platform.openfinance.temporal.activity.PublishDataActivityImpl;
-import com.aurix.platform.openfinance.temporal.activity.TransformDataActivity;
 import com.aurix.platform.openfinance.temporal.activity.TransformDataActivityImpl;
-import com.aurix.platform.openfinance.temporal.workflow.DataExtractionWorkflow;
 import com.aurix.platform.openfinance.temporal.workflow.DataExtractionWorkflowImpl;
 import io.temporal.client.WorkflowClient;
+import io.temporal.client.WorkflowClientOptions;
+import io.temporal.serviceclient.WorkflowServiceStubs;
+import io.temporal.serviceclient.WorkflowServiceStubsOptions;
 import io.temporal.worker.Worker;
 import io.temporal.worker.WorkerFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
-
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
 /**
  * Worker Temporal para Open Finance.
- * Registra workflows e atividades:
- * - DataExtractionWorkflow
- * - ConsentMonitoringWorkflow
- * - Activities: ExtractData, TransformData, PublishData, ValidateConsent, Reconcile
+ * Registra o {@link DataExtractionWorkflowImpl} e as activities de extração/transformação/publicação
+ * na task queue documentada em architecture/infrastructure.yaml (openfinance-extraction).
+ *
+ * <p>Conecta ao Temporal server via wiring manual (mesmo padrão usado em
+ * aurix-backend/svc-customer/.../OnboardingTemporalWorker) em vez de depender de autoconfiguração do
+ * temporal-spring-boot-starter, para poder degradar graciosamente (log de warning, app continua no ar)
+ * quando o Temporal não está acessível em dev/local.
+ *
+ * <p>TODO (fora do escopo dev/local atual): implementar e registrar {@code ConsentMonitoringWorkflow}
+ * numa task queue própria quando esse workflow existir — hoje não há implementação real dele.
  */
 @Component
 public class OpenFinanceWorker {
 
     private static final Logger log = LoggerFactory.getLogger(OpenFinanceWorker.class);
-    private static final String TASK_QUEUE = "open-finance-extraction";
-    private static final String CONSENT_TASK_QUEUE = "open-finance-consent-monitoring";
+    private static final String TASK_QUEUE = "openfinance-extraction";
 
-    private final WorkflowClient workflowClient;
+    @Value("${temporal.connection.target:localhost:7233}")
+    private String temporalAddress;
+
+    @Value("${temporal.connection.namespace:aurix}")
+    private String namespace;
+
     private final ExtractDataActivityImpl extractDataActivity;
     private final TransformDataActivityImpl transformDataActivity;
     private final PublishDataActivityImpl publishDataActivity;
 
     private WorkerFactory workerFactory;
 
-    public OpenFinanceWorker(WorkflowClient workflowClient,
-                             ExtractDataActivityImpl extractDataActivity,
-                             TransformDataActivityImpl transformDataActivity,
-                             PublishDataActivityImpl publishDataActivity) {
-        this.workflowClient = workflowClient;
+    public OpenFinanceWorker(ExtractDataActivityImpl extractDataActivity,
+                              TransformDataActivityImpl transformDataActivity,
+                              PublishDataActivityImpl publishDataActivity) {
         this.extractDataActivity = extractDataActivity;
         this.transformDataActivity = transformDataActivity;
         this.publishDataActivity = publishDataActivity;
@@ -51,23 +58,30 @@ public class OpenFinanceWorker {
 
     @PostConstruct
     public void iniciar() {
-        log.info("Iniciando worker Temporal para Open Finance");
+        try {
+            WorkflowServiceStubsOptions stubsOptions = WorkflowServiceStubsOptions.newBuilder()
+                    .setTarget(temporalAddress)
+                    .build();
+            WorkflowServiceStubs serviceStubs = WorkflowServiceStubs.newServiceStubs(stubsOptions);
 
-        workerFactory = WorkerFactory.newInstance(workflowClient);
+            WorkflowClient workflowClient = WorkflowClient.newInstance(serviceStubs,
+                    WorkflowClientOptions.newBuilder().setNamespace(namespace).build());
 
-        Worker extractionWorker = workerFactory.newWorker(TASK_QUEUE);
-        extractionWorker.registerWorkflowImplementationTypes(DataExtractionWorkflowImpl.class);
-        extractionWorker.registerActivitiesImplementations(
-                extractDataActivity,
-                transformDataActivity,
-                publishDataActivity
-        );
+            workerFactory = WorkerFactory.newInstance(workflowClient);
 
-        Worker consentWorker = workerFactory.newWorker(CONSENT_TASK_QUEUE);
-        consentWorker.registerWorkflowImplementationTypes(DataExtractionWorkflowImpl.class);
+            Worker extractionWorker = workerFactory.newWorker(TASK_QUEUE);
+            extractionWorker.registerWorkflowImplementationTypes(DataExtractionWorkflowImpl.class);
+            extractionWorker.registerActivitiesImplementations(
+                    extractDataActivity,
+                    transformDataActivity,
+                    publishDataActivity
+            );
 
-        workerFactory.start();
-        log.info("Worker Temporal iniciado com sucesso - task queues: {}, {}", TASK_QUEUE, CONSENT_TASK_QUEUE);
+            workerFactory.start();
+            log.info("Worker Temporal iniciado - task queue: {}", TASK_QUEUE);
+        } catch (Exception e) {
+            log.warn("Falha ao conectar com Temporal ({}): worker de extração não iniciado", e.getMessage());
+        }
     }
 
     @PreDestroy

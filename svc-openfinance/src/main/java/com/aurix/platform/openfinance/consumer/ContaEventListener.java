@@ -68,13 +68,13 @@ public class ContaEventListener {
         return c.getDataExpiracao().isBefore(LocalDateTime.now());
     }
 
-    private String mapTipoConta(String tipo) {
-        if (tipo == null) return "CONTA_DE_DEPOSITO";
+    private ContaConsentida.TipoConta mapTipoConta(String tipo) {
+        if (tipo == null) return ContaConsentida.TipoConta.CONTA_DE_DEPOSITO;
         return switch (tipo.toUpperCase()) {
-            case "POUPANCA" -> "CONTA_POUPANCA";
-            case "SALARIO" -> "CONTA_SALARIO";
-            case "PAGAMENTO" -> "CONTA_DE_PAGAMENTO";
-            default -> "CONTA_DE_DEPOSITO";
+            case "POUPANCA" -> ContaConsentida.TipoConta.CONTA_POUPANCA;
+            case "SALARIO" -> ContaConsentida.TipoConta.CONTA_SALARIO;
+            case "PAGAMENTO" -> ContaConsentida.TipoConta.CONTA_DE_PAGAMENTO;
+            default -> ContaConsentida.TipoConta.CONTA_DE_DEPOSITO;
         };
     }
 }

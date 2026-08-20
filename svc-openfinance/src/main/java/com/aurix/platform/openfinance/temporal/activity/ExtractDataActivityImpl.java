@@ -19,7 +19,7 @@ public class ExtractDataActivityImpl implements ExtractDataActivity {
 
     @Override
     public ExtractResult extract(ExtractRequest request) {
-        String activityId = Activity.getInfo().getActivityId();
+        String activityId = Activity.getExecutionContext().getInfo().getActivityId();
         log.info("Iniciando extração - node: {}, recurso: {}, activity: {}",
                 request.getNodeId(), request.getResource(), activityId);
 

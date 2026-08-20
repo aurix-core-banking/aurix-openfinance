@@ -1,5 +1,6 @@
 package com.aurix.platform.openfinance.extractor;
 
+import com.aurix.platform.openfinance.extractor.dto.ExtractorCapabilities;
 import com.aurix.platform.openfinance.extractor.dto.ResourceType;
 import org.springframework.stereotype.Component;
 

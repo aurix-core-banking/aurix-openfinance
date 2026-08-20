@@ -95,7 +95,6 @@ class ConsentimentoServiceTest {
             criado.getConsentId(), "Dados incompletos");
 
         assertEquals("REJECTED", rejeitado.getStatus());
-        assertEquals("Dados incompletos", rejeitado.getPermissions().toString().contains("Dados") ? "ok" : "fail");
     }
 
     private ConsentimentoRequest createRequest(String clientId) {

@@ -1,6 +1,7 @@
 package com.aurix.platform.openfinance.extractor;
 
 import com.aurix.platform.openfinance.context.entity.AuthorizedContext;
+import com.aurix.platform.openfinance.extractor.adapter.CardSourceAdapter;
 import com.aurix.platform.openfinance.extractor.dto.RawData;
 import com.aurix.platform.openfinance.extractor.dto.ResourceDescriptor;
 import com.aurix.platform.openfinance.extractor.dto.ResourceType;
@@ -11,23 +12,34 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Extrai dados de cartoes de credito do core banking.
+ * Extrai cartões de crédito, faturas e transações via {@link CardSourceAdapter}.
  * Suporta: CREDIT_CARDS, CARD_BILLS, CARD_TRANSACTIONS.
  */
 @Component
 public class CoreCardExtractor extends BaseExtractor {
 
+    private final CardSourceAdapter sourceAdapter;
+
+    public CoreCardExtractor(CardSourceAdapter sourceAdapter) {
+        this.sourceAdapter = sourceAdapter;
+    }
+
     @Override
     protected RawData doExtract(AuthorizedContext context, ResourceDescriptor resource) {
+        List<CardSourceAdapter.Card> cartoes = sourceAdapter.findCards(context.getConsentId());
+        List<CardSourceAdapter.Bill> faturas = sourceAdapter.findBills(context.getConsentId());
+        List<CardSourceAdapter.CardTransaction> transacoes =
+                sourceAdapter.findCardTransactions(context.getConsentId());
+
         return RawData.builder()
                 .resourceType(resource.getResourceType())
                 .contextId(context.getContextId())
                 .payload(Map.of(
-                        "cartoes", List.of(),
-                        "faturas", List.of(),
-                        "transacoes_cartao", List.of()
+                        "cartoes", cartoes,
+                        "faturas", faturas,
+                        "transacoes_cartao", transacoes
                 ))
-                .recordCount(0)
+                .recordCount(cartoes.size() + faturas.size() + transacoes.size())
                 .extractedAt(java.time.LocalDateTime.now())
                 .build();
     }
@@ -43,7 +55,7 @@ public class CoreCardExtractor extends BaseExtractor {
     public ExtractorCapabilities getCapabilities() {
         return ExtractorCapabilities.builder()
                 .name("CoreCardExtractor")
-                .description("Extracao de cartoes de credito, faturas e transacoes")
+                .description("Extração de cartões, faturas e transações via CardSourceAdapter")
                 .supportedResourceTypes(List.of(
                         ResourceType.CREDIT_CARDS,
                         ResourceType.CARD_BILLS,

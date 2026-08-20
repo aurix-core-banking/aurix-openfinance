@@ -1,5 +1,6 @@
 package com.aurix.platform.openfinance.temporal.workflow;
 
+import com.aurix.platform.openfinance.temporal.workflow.dto.ExecutionPlanRequest;
 import io.temporal.workflow.QueryMethod;
 import io.temporal.workflow.SignalMethod;
 import io.temporal.workflow.WorkflowInterface;

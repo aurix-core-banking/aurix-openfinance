@@ -2,7 +2,7 @@ package com.aurix.platform.openfinance.controller;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
@@ -21,7 +21,7 @@ class HealthControllerTest {
 
     @Test
     void deveRetornarHealthUp() throws Exception {
-        mockMvc.perform(get("/actuator/health"))
+        mockMvc.perform(get("/health"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("UP"))
             .andExpect(jsonPath("$.service").value("svc-openfinance"))
@@ -30,7 +30,7 @@ class HealthControllerTest {
 
     @Test
     void deveRetornarInfo() throws Exception {
-        mockMvc.perform(get("/actuator/info"))
+        mockMvc.perform(get("/info"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.service").value("svc-openfinance"))
             .andExpect(jsonPath("$.version").value("1.0.0"));

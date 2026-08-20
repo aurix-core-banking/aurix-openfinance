@@ -19,7 +19,7 @@ public class PublishDataActivityImpl implements PublishDataActivity {
 
     @Override
     public PublishResult publish(PublishRequest request) {
-        String activityId = Activity.getInfo().getActivityId();
+        String activityId = Activity.getExecutionContext().getInfo().getActivityId();
         log.info("Iniciando publicação - node: {}, recurso: {}, activity: {}",
                 request.getNodeId(), request.getResource(), activityId);
 

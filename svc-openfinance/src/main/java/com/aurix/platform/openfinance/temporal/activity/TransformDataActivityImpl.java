@@ -17,7 +17,7 @@ public class TransformDataActivityImpl implements TransformDataActivity {
 
     @Override
     public TransformResult transform(TransformRequest request) {
-        String activityId = Activity.getInfo().getActivityId();
+        String activityId = Activity.getExecutionContext().getInfo().getActivityId();
         log.info("Iniciando transformação - node: {}, recurso: {}, activity: {}",
                 request.getNodeId(), request.getResource(), activityId);
 
