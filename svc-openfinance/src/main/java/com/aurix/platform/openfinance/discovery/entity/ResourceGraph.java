@@ -20,10 +20,17 @@ public class ResourceGraph {
     @Column(nullable = false)
     private String consentId;
 
-    @OneToMany(mappedBy = "graphId", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    // Sem cascade: nodes/edges são persistidos explicitamente via seus próprios
+    // repositories em ResourceDiscoveryService.discover(). "graphId" aqui é uma
+    // coluna String simples (chave de negócio), não uma associação @ManyToOne de
+    // verdade — com cascade=ALL, popular esta lista antes de salvar o graph fazia
+    // o Hibernate tentar persistir através dessa relação mal-formada, corrompendo
+    // o plano de query subsequente em resource_edges (erro "CHARACTER VARYING to
+    // DECFLOAT" ao consultar por graph_id).
+    @OneToMany(mappedBy = "graphId", fetch = FetchType.LAZY)
     private List<ResourceNode> nodes = new ArrayList<>();
 
-    @OneToMany(mappedBy = "graphId", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "graphId", fetch = FetchType.LAZY)
     private List<ResourceEdge> edges = new ArrayList<>();
 
     @Column(nullable = false)
