@@ -3,6 +3,7 @@ package com.aurix.platform.openfinance.architecture;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.lang.ArchRule;
+import com.aurix.platform.openfinance.extractor.DataExtractor;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -44,6 +45,60 @@ public class ArchitectureTest {
                 .that().areDeclaredInClassesThat().haveSimpleName("AuthorizedContext")
                 .should().haveNameMatching("set.*")
                 .because("Authorized context must be immutable (INV-005)");
+
+        rule.check(classes);
+    }
+
+    // INV-001: NO_CONSENT_NO_EXECUTION
+    // Todo extractor opera sob um AuthorizedContext derivado de um consentimento
+    // aprovado — sem isso, não há execução de extração.
+    @Test
+    void testNoConsentNoExecution() {
+        ArchRule rule = classes()
+                .that().implement(DataExtractor.class)
+                .and().areNotInterfaces()
+                .should().dependOnClassesThat()
+                .resideInAPackage("..context..")
+                .because("INV-001: extractors executam apenas sob um AuthorizedContext "
+                        + "derivado de consentimento aprovado");
+
+        rule.check(classes);
+    }
+
+    // INV-002: NO_AUTHORIZED_RESOURCE_NO_ACCESS
+    // 1) Os source adapters (acesso cru à fonte) só podem ser alcançados pela camada
+    //    de extractors, nunca por controllers/serviços.
+    // 2) A base de extração que valida o recurso contra o grafo autorizado depende de
+    //    AuthorizedContext — o gateway obrigatório de autorização de recurso.
+    @Test
+    void testNoAuthorizedResourceNoAccess() {
+        ArchRule adaptersIsolados = classes()
+                .that().resideInAPackage("..extractor.adapter..")
+                .should().onlyBeAccessed().byAnyPackage("..extractor..")
+                .because("INV-002: adapters de fonte não podem ser acessados fora da "
+                        + "camada de extractors (controle de autorização é da extração)");
+
+        ArchRule baseValidaRecurso = classes()
+                .that().haveSimpleName("BaseExtractor")
+                .should().dependOnClassesThat().haveSimpleName("AuthorizedContext")
+                .because("INV-002: a extração só acessa recursos validados contra o "
+                        + "grafo autorizado do AuthorizedContext");
+
+        adaptersIsolados.check(classes);
+        baseValidaRecurso.check(classes);
+    }
+
+    // INV-003: NO_LINEAGE_NO_PUBLICATION
+    // Toda implementação de atividade de publicação de dados depende de LineageService
+    // — nada é publicado sem linhagem fechada.
+    @Test
+    void testNoLineageNoPublication() {
+        ArchRule rule = classes()
+                .that().implement("com.aurix.platform.openfinance.temporal.activity.PublishDataActivity")
+                .and().areNotInterfaces()
+                .should().dependOnClassesThat().haveSimpleName("LineageService")
+                .because("INV-003: publicação de dados exige linhagem — "
+                        + "sem LineageService não há publicação");
 
         rule.check(classes);
     }
