@@ -32,3 +32,11 @@ aurix:
     bacen-url: http://localhost:8095
     consent-max-duration-days: 30
     rate-limit-per-second: 100
+    trust:
+      receipt:
+        algorithm: ES256
+      dpop:
+        enabled: false
+        require: false
+      mtls:
+        strict: false

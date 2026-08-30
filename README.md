@@ -24,14 +24,13 @@ Arquitetura completa, ADRs e catálogo de eventos em [`architecture/`](architect
 
 ![Diagrama de arquitetura-alvo em camadas](architecture/diagrams/arquitetura-em-camadas.png)
 
-> Este diagrama é a **visão-alvo** (mesma referência dos ADRs), não uma foto do estado atual —
-> por exemplo, a camada de segurança ali representa mTLS/DPoP completos (ainda pendente, ver
-> [issue #1](https://github.com/aurix-core-banking/aurix-openfinance/issues/1)) e a publicação
+> Este diagrama é a **visão-alvo** (mesma referência dos ADRs) — a publicação
 > sugere um data warehouse dedicado (hoje um Postgres pragmático, ver `DataProductService`).
 > Para o que já está implementado de fato em cada camada, veja a tabela abaixo.
 
 | Plano | O que faz | Pacotes principais |
 |---|---|---|
+| Trust Plane | mTLS (header/CA), DPoP (RFC 9449), assinatura real EC/RSA, recibo de consentimento (não-repúdio) | `trust/*`, `config/OpenFinanceSecurityConfig` |
 | Consent Plane | Consentimento, descoberta de recursos, policy engine (avaliação real, não simulada) | `service` (Consentimento), `discovery`, `policy` |
 | Execution Plane | Planner gera DAG, Temporal executa, reconciliação | `planner`, `temporal`, `reconciliation` |
 | Pipelines por domínio | Extractors **agnósticos de core** via portas (`*SourceAdapter`) | `extractor`, `extractor/adapter` |
@@ -136,7 +135,9 @@ Producers ativos hoje (catálogo completo em [`architecture/events.yaml`](archit
 
 ## Status / Roadmap
 
-Build funcional de ponta a ponta para ambiente dev/local, 45 testes automatizados (incluindo um
-workflow Temporal completo via `TestWorkflowEnvironment` e verificação de assinatura HMAC de webhook).
-Pendente: mTLS/DPoP de produção (FAPI-Brasil completo) e certificado ICP-Brasil real — desenho em
-[issue #1](https://github.com/aurix-core-banking/aurix-openfinance/issues/1).
+Build funcional de ponta a ponta para ambiente dev/local, com testes automatizados (incluindo um
+workflow Temporal completo via `TestWorkflowEnvironment`, verificação de assinatura HMAC de webhook
+e Trust Plane com DPoP + assinatura real EC/RSA + recibo de consentimento).
+Pendente para produção real: certificado ICP-Brasil credenciado no sandbox BACEN e Autoridade de
+Carimbo do Tempo (RFC 3161) — hoje o Trust Plane (mTLS/DPoP/assinatura) é funcional, com chaves
+dev/local em memória e DPoP ativo sob perfil `prod`.

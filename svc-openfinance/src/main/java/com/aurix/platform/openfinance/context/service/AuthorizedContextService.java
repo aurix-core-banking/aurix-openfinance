@@ -4,16 +4,14 @@ import com.aurix.platform.openfinance.context.entity.AuthorizedContext;
 import com.aurix.platform.openfinance.context.repository.AuthorizedContextRepository;
 import com.aurix.platform.openfinance.policy.dto.PolicyDecisionResponse;
 import com.aurix.platform.openfinance.policy.entity.PolicyDecisionType;
+import com.aurix.platform.openfinance.trust.service.SignedPayload;
+import com.aurix.platform.openfinance.trust.service.SigningService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
-import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,9 +25,12 @@ public class AuthorizedContextService {
     private static final Logger log = LoggerFactory.getLogger(AuthorizedContextService.class);
 
     private final AuthorizedContextRepository contextRepository;
+    private final SigningService signingService;
 
-    public AuthorizedContextService(AuthorizedContextRepository contextRepository) {
+    public AuthorizedContextService(AuthorizedContextRepository contextRepository,
+                                    SigningService signingService) {
         this.contextRepository = contextRepository;
+        this.signingService = signingService;
     }
 
     /**
@@ -48,8 +49,8 @@ public class AuthorizedContextService {
         String contextId = UUID.randomUUID().toString();
         LocalDateTime validUntil = LocalDateTime.now().plusHours(1);
 
-        String signatureData = contextId + subject + policyDecision.getConsentId()
-                + purpose + validUntil + dpopThumbprint;
+        String signatureData = contextId + "|" + subject + "|" + policyDecision.getConsentId()
+                + "|" + purpose + "|" + validUntil + "|" + dpopThumbprint;
         String signature = computeSignature(signatureData, signingAlgorithm);
 
         AuthorizedContext context = new AuthorizedContext(
@@ -132,16 +133,7 @@ public class AuthorizedContextService {
     }
 
     private String computeSignature(String data, String algorithm) {
-        try {
-            MessageDigest digest;
-            switch (algorithm) {
-                case "ES256", "RS256" -> digest = MessageDigest.getInstance("SHA-256");
-                default -> digest = MessageDigest.getInstance("SHA-256");
-            }
-            byte[] hash = digest.digest(data.getBytes(StandardCharsets.UTF_8));
-            return Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("Algoritmo de assinatura não disponível: " + algorithm, e);
-        }
+        SignedPayload signed = signingService.sign(data, algorithm);
+        return signed.signature();
     }
 }

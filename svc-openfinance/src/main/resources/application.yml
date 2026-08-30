@@ -76,3 +76,15 @@ aurix:
     bacen-url: ${AURIX_BACEN_URL:http://localhost:8095}
     consent-max-duration-days: ${AURIX_OF_CONSENT_MAX_DAYS:365}
     rate-limit-per-second: ${AURIX_OF_RATE_LIMIT:10}
+    trust:
+      receipt:
+        algorithm: ${AURIX_OF_RECEIPT_ALGORITHM:ES256}
+      dpop:
+        enabled: ${AURIX_OF_DPOP_ENABLED:true}
+        require: ${AURIX_OF_DPOP_REQUIRE:true}
+      mtls:
+        subject-header: ${AURIX_OF_MTLS_SUBJECT_HEADER:X-Client-Cert-Subject}
+        fingerprint-header: ${AURIX_OF_MTLS_FINGERPRINT_HEADER:X-Client-Cert-Sha256}
+        strict: ${AURIX_OF_MTLS_STRICT:false}
+        certificate-header: ${AURIX_OF_MTLS_CERT_HEADER:X-Client-Cert}
+        trusted-ca-pem: ${AURIX_OF_MTLS_TRUSTED_CA:}

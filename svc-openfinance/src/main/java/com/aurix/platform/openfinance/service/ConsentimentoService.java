@@ -14,6 +14,7 @@ import com.aurix.platform.openfinance.repository.EmprestimoConsentidoRepository;
 import com.aurix.platform.openfinance.repository.SeguroConsentidoRepository;
 import com.aurix.platform.openfinance.repository.PixConsentidoRepository;
 import com.aurix.platform.openfinance.event.OpenFinanceEventPublisher;
+import com.aurix.platform.openfinance.trust.receipt.service.ConsentReceiptService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -40,6 +41,7 @@ public class ConsentimentoService {
     private final SeguroConsentidoRepository seguroRepository;
     private final PixConsentidoRepository pixRepository;
     private final OpenFinanceEventPublisher eventPublisher;
+    private final ConsentReceiptService consentReceiptService;
 
     @Value("${aurix.openfinance.consent-max-duration-days:365}")
     private int maxDurationDays;
@@ -54,7 +56,8 @@ public class ConsentimentoService {
                                 EmprestimoConsentidoRepository emprestimoRepository,
                                 SeguroConsentidoRepository seguroRepository,
                                 PixConsentidoRepository pixRepository,
-                                OpenFinanceEventPublisher eventPublisher) {
+                                OpenFinanceEventPublisher eventPublisher,
+                                ConsentReceiptService consentReceiptService) {
         this.repository = repository;
         this.contaRepository = contaRepository;
         this.transacaoRepository = transacaoRepository;
@@ -66,6 +69,7 @@ public class ConsentimentoService {
         this.seguroRepository = seguroRepository;
         this.pixRepository = pixRepository;
         this.eventPublisher = eventPublisher;
+        this.consentReceiptService = consentReceiptService;
     }
 
     public ConsentimentoResponse criar(ConsentimentoRequest request, Long userId) {
@@ -96,6 +100,11 @@ public class ConsentimentoService {
         c.setVersion(c.getVersion() + 1);
         c = repository.save(c);
         log.info("Consentimento aprovado: {}", consentId);
+
+        // Formação do recibo de consentimento (não-repúdio — issue #1 / WP2)
+        consentReceiptService.gerarRecibo(consentId, c.getClientId(),
+                c.getPermissions(), "dados-compartilhamento", c.getDataExpiracao());
+
         eventPublisher.publishConsentGranted(consentId, c.getClientId());
         return toResponse(c);
     }

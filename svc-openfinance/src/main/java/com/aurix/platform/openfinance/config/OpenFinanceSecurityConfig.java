@@ -1,5 +1,6 @@
 package com.aurix.platform.openfinance.config;
 
+import com.aurix.platform.openfinance.trust.filter.DpopFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -7,10 +8,17 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
 public class OpenFinanceSecurityConfig {
+
+    private final DpopFilter dpopFilter;
+
+    public OpenFinanceSecurityConfig(DpopFilter dpopFilter) {
+        this.dpopFilter = dpopFilter;
+    }
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -23,6 +31,7 @@ public class OpenFinanceSecurityConfig {
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 .anyRequest().authenticated()
             )
+            .addFilterBefore(dpopFilter, UsernamePasswordAuthenticationFilter.class)
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}));
         return http.build();
     }
