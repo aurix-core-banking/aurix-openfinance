@@ -103,6 +103,20 @@ public class ArchitectureTest {
         rule.check(classes);
     }
 
+    // INV-006: CONSENT_VERSIONING
+    // Toda alteração de consentimento passa pelo histórico append-only — o serviço
+    // de consentimento DEVE depender do repositório de versões (nunca mutar a anterior).
+    @Test
+    void testConsentVersioning() {
+        ArchRule rule = classes()
+                .that().haveSimpleName("ConsentimentoService")
+                .should().dependOnClassesThat().haveSimpleName("ConsentimentoVersaoRepository")
+                .because("INV-006: alteração de consentimento cria nova versão "
+                        + "(append-only), nunca muta a anterior");
+
+        rule.check(classes);
+    }
+
     // Consent Plane dependencies
     @Test
     void testConsentPlaneDependencies() {

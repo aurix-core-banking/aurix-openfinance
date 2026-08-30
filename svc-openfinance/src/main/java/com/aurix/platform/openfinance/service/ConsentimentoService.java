@@ -3,7 +3,9 @@ package com.aurix.platform.openfinance.service;
 import com.aurix.platform.openfinance.dto.ConsentimentoRequest;
 import com.aurix.platform.openfinance.dto.ConsentimentoResponse;
 import com.aurix.platform.openfinance.entity.Consentimento;
+import com.aurix.platform.openfinance.entity.ConsentimentoVersao;
 import com.aurix.platform.openfinance.repository.ConsentimentoRepository;
+import com.aurix.platform.openfinance.repository.ConsentimentoVersaoRepository;
 import com.aurix.platform.openfinance.repository.ContaConsentidaRepository;
 import com.aurix.platform.openfinance.repository.TransacaoConsentidaRepository;
 import com.aurix.platform.openfinance.repository.PessoaConsentidaRepository;
@@ -31,6 +33,7 @@ public class ConsentimentoService {
 
     private static final Logger log = LoggerFactory.getLogger(ConsentimentoService.class);
     private final ConsentimentoRepository repository;
+    private final ConsentimentoVersaoRepository versaoRepository;
     private final ContaConsentidaRepository contaRepository;
     private final TransacaoConsentidaRepository transacaoRepository;
     private final PessoaConsentidaRepository pessoaRepository;
@@ -47,6 +50,7 @@ public class ConsentimentoService {
     private int maxDurationDays;
 
     public ConsentimentoService(ConsentimentoRepository repository,
+                                ConsentimentoVersaoRepository versaoRepository,
                                 ContaConsentidaRepository contaRepository,
                                 TransacaoConsentidaRepository transacaoRepository,
                                 PessoaConsentidaRepository pessoaRepository,
@@ -59,6 +63,7 @@ public class ConsentimentoService {
                                 OpenFinanceEventPublisher eventPublisher,
                                 ConsentReceiptService consentReceiptService) {
         this.repository = repository;
+        this.versaoRepository = versaoRepository;
         this.contaRepository = contaRepository;
         this.transacaoRepository = transacaoRepository;
         this.pessoaRepository = pessoaRepository;
@@ -82,6 +87,8 @@ public class ConsentimentoService {
         int days = request.getExpirationDays() != null ? Math.min(request.getExpirationDays(), maxDurationDays) : maxDurationDays;
         c.setDataExpiracao(LocalDateTime.now().plusDays(days));
         c = repository.save(c);
+        registrarVersao(c.getConsentId(), c.getVersion(),
+                Consentimento.StatusConsentimento.AWAITING_AUTHORISATION, null, null);
         log.info("Consentimento criado: {}", c.getConsentId());
         return toResponse(c);
     }
@@ -95,10 +102,15 @@ public class ConsentimentoService {
     public ConsentimentoResponse aprovar(String consentId) {
         Consentimento c = repository.findByConsentId(consentId)
             .orElseThrow(() -> new IllegalArgumentException("Consentimento não encontrado: " + consentId));
+        validarTransicao(c.getStatus(), Consentimento.StatusConsentimento.AUTHORISED);
         c.setStatus(Consentimento.StatusConsentimento.AUTHORISED);
         c.setDataAprovacao(LocalDateTime.now());
-        c.setVersion(c.getVersion() + 1);
+        int novaVersao = c.getVersion() + 1;
+        c.setVersion(novaVersao);
         c = repository.save(c);
+
+        registrarVersao(consentId, novaVersao,
+                Consentimento.StatusConsentimento.AUTHORISED, c.getDataAprovacao(), null);
         log.info("Consentimento aprovado: {}", consentId);
 
         // Formação do recibo de consentimento (não-repúdio — issue #1 / WP2)
@@ -112,10 +124,14 @@ public class ConsentimentoService {
     public ConsentimentoResponse rejeitar(String consentId, String motivo) {
         Consentimento c = repository.findByConsentId(consentId)
             .orElseThrow(() -> new IllegalArgumentException("Consentimento não encontrado: " + consentId));
+        validarTransicao(c.getStatus(), Consentimento.StatusConsentimento.REJECTED);
         c.setStatus(Consentimento.StatusConsentimento.REJECTED);
         c.setMotivoRejeicao(motivo);
-        c.setVersion(c.getVersion() + 1);
+        int novaVersao = c.getVersion() + 1;
+        c.setVersion(novaVersao);
         c = repository.save(c);
+        registrarVersao(consentId, novaVersao,
+                Consentimento.StatusConsentimento.REJECTED, null, motivo);
         log.info("Consentimento rejeitado: {} - {}", consentId, motivo);
         return toResponse(c);
     }
@@ -123,10 +139,14 @@ public class ConsentimentoService {
     public ConsentimentoResponse revogar(String consentId, String motivo) {
         Consentimento c = repository.findByConsentId(consentId)
             .orElseThrow(() -> new IllegalArgumentException("Consentimento não encontrado: " + consentId));
+        validarTransicao(c.getStatus(), Consentimento.StatusConsentimento.REVOKED);
         c.setStatus(Consentimento.StatusConsentimento.REVOKED);
         c.setMotivoRejeicao(motivo);
-        c.setVersion(c.getVersion() + 1);
+        int novaVersao = c.getVersion() + 1;
+        c.setVersion(novaVersao);
         c = repository.save(c);
+        registrarVersao(consentId, novaVersao,
+                Consentimento.StatusConsentimento.REVOKED, null, motivo);
         log.info("Consentimento revogado: {} - {}", consentId, motivo);
         eventPublisher.publishConsentRevoked(consentId, motivo);
         return toResponse(c);
@@ -145,9 +165,13 @@ public class ConsentimentoService {
         long count = 0;
         for (Consentimento c : expirados) {
             if (c.getDataExpiracao().isBefore(LocalDateTime.now())) {
+                validarTransicao(c.getStatus(), Consentimento.StatusConsentimento.EXPIRED);
                 c.setStatus(Consentimento.StatusConsentimento.EXPIRED);
-                c.setVersion(c.getVersion() + 1);
+                int novaVersao = c.getVersion() + 1;
+                c.setVersion(novaVersao);
                 repository.save(c);
+                registrarVersao(c.getConsentId(), novaVersao,
+                        Consentimento.StatusConsentimento.EXPIRED, null, "Consentimento expirado");
                 limparDadosExpirados(c.getConsentId());
                 eventPublisher.publishConsentExpired(c.getConsentId());
                 count++;
@@ -156,6 +180,48 @@ public class ConsentimentoService {
         if (count > 0) {
             log.info("Consentimentos expirados processados: {}", count);
         }
+    }
+
+    /**
+     * INV-006: valida a transição de estado do consentimento. Transições inválidas
+     * (mutações do histórico) são rejeitadas — ex.: rejeitar/reaprovar um
+     * consentimento já aprovado.
+     */
+    private void validarTransicao(Consentimento.StatusConsentimento atual,
+                                  Consentimento.StatusConsentimento novo) {
+        boolean valida = switch (atual) {
+            case AWAITING_AUTHORISATION -> List.of(
+                    Consentimento.StatusConsentimento.AUTHORISED,
+                    Consentimento.StatusConsentimento.REJECTED,
+                    Consentimento.StatusConsentimento.REVOKED,
+                    Consentimento.StatusConsentimento.EXPIRED).contains(novo);
+            case AUTHORISED -> List.of(
+                    Consentimento.StatusConsentimento.REVOKED,
+                    Consentimento.StatusConsentimento.EXPIRED).contains(novo);
+            default -> false;
+        };
+        if (!valida) {
+            throw new IllegalStateException("Mutação de consentimento inválida: "
+                    + atual + " -> " + novo + " (INV-006)");
+        }
+    }
+
+    /**
+     * INV-006: registra uma versão imutável (append-only) no histórico do
+     * consentimento. Linhas de versões anteriores nunca são alteradas.
+     */
+    private void registrarVersao(String consentId, int versao,
+                                 Consentimento.StatusConsentimento status,
+                                 LocalDateTime dataAprovacao, String motivo) {
+        ConsentimentoVersao v = new ConsentimentoVersao();
+        v.setConsentId(consentId);
+        v.setVersao(versao);
+        v.setStatus(status);
+        v.setDataEvento(LocalDateTime.now());
+        v.setDataAprovacao(dataAprovacao);
+        v.setMotivo(motivo);
+        versaoRepository.save(v);
+        log.debug("Versão {} do consentimento {} registrada: {}", versao, consentId, status);
     }
 
     private void limparDadosExpirados(String consentId) {
