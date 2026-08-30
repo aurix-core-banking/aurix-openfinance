@@ -6,6 +6,8 @@ import com.aurix.platform.openfinance.planner.entity.ExecutionPlan;
 import com.aurix.platform.openfinance.planner.entity.PlanNode;
 import com.aurix.platform.openfinance.planner.entity.PlanStatus;
 import com.aurix.platform.openfinance.planner.repository.ExecutionPlanRepository;
+import com.aurix.platform.openfinance.temporal.dispatcher.WorkflowExecutionDispatcher;
+import com.aurix.platform.openfinance.temporal.workflow.dto.ExecutionPlanRequest;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -54,9 +56,12 @@ public class ExtractionPlannerService {
     );
 
     private final ExecutionPlanRepository planRepository;
+    private final WorkflowExecutionDispatcher dispatcher;
 
-    public ExtractionPlannerService(ExecutionPlanRepository planRepository) {
+    public ExtractionPlannerService(ExecutionPlanRepository planRepository,
+                                    WorkflowExecutionDispatcher dispatcher) {
         this.planRepository = planRepository;
+        this.dispatcher = dispatcher;
     }
 
     /**
@@ -92,7 +97,51 @@ public class ExtractionPlannerService {
         ExecutionPlan planoSalvo = planRepository.save(plano);
         log.info("Plano criado com sucesso: {}", planoSalvo.getPlanId());
 
-        return converterParaResponse(planoSalvo, nodes, edges);
+        String workflowId = dispatcher.despachar(converterParaRequestTemporal(planoSalvo, nodes));
+        if (workflowId != null) {
+            atualizarStatus(planoSalvo.getPlanId(), PlanStatus.EM_EXECUCAO);
+            log.info("Plano {} despachado para o Temporal (workflowId={})", planoSalvo.getPlanId(), workflowId);
+        } else {
+            log.warn("Plano {} criado, mas o disparo no Temporal não foi possível "
+                    + "(Temporal indisponível ou dispatcher desabilitado)", planoSalvo.getPlanId());
+        }
+
+        ExecutionPlan planoCriado = buscaAtualizada(planoSalvo.getPlanId());
+        return converterParaResponse(planoCriado, nodes, edges);
+    }
+
+    private ExecutionPlan buscaAtualizada(String planId) {
+        return planRepository.findByPlanId(planId).orElseThrow(
+                () -> new IllegalStateException("Plano não encontrado após criação: " + planId));
+    }
+
+    /**
+     * Constrói a requisição Temporal (ExecutionPlanRequest) a partir do plano
+     * persistido e dos nós do DAG já montados. Mantém a conversão na slice planner
+     * para preservar a aciclicidade planner → temporal testada em ArchitectureTest.
+     */
+    private ExecutionPlanRequest converterParaRequestTemporal(ExecutionPlan plano, List<PlanNode> nodes) {
+        ExecutionPlanRequest request = new ExecutionPlanRequest();
+        request.setPlanId(plano.getPlanId());
+        request.setConsentId(plano.getConsentId());
+        request.setConsentVersion(plano.getConsentVersion());
+        request.setParticipantId(plano.getParticipanteId());
+        request.setDagJson(plano.getDagDefinition());
+        request.setNodes(nodes.stream().map(node -> {
+            ExecutionPlanRequest.SerializableNode n = new ExecutionPlanRequest.SerializableNode();
+            n.setNodeId(node.getNodeId());
+            n.setCapability(node.getCapability());
+            n.setResource(node.getResource());
+            n.setDependencies(node.getDependencies());
+            n.setIdempotencyKey(node.getIdempotencyKey() != null
+                    ? node.getIdempotencyKey() : UUID.randomUUID().toString());
+            n.setTimeoutSeconds(node.getTimeoutSeconds());
+            if (node.getRetryPolicy() != null) {
+                n.setMaxAttempts(node.getRetryPolicy().getMaxAttempts());
+            }
+            return n;
+        }).toList());
+        return request;
     }
 
     /**
