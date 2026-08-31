@@ -3,6 +3,9 @@ package com.aurix.platform.openfinance.pipeline;
 import com.aurix.platform.openfinance.pipeline.canonicalization.entity.RawRecord;
 import com.aurix.platform.openfinance.pipeline.lineage.entity.LineageRecord;
 import com.aurix.platform.openfinance.pipeline.lineage.repository.LineageRecordRepository;
+import com.aurix.platform.openfinance.pipeline.pii.repository.PiiClassificationRepository;
+import com.aurix.platform.openfinance.pipeline.quality.repository.QualityResultRepository;
+import com.aurix.platform.openfinance.pipeline.validation.repository.ValidationResultRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,6 +34,15 @@ class PipelineOrchestratorLineageTest {
 
     @Autowired
     private LineageRecordRepository lineageRepository;
+
+    @Autowired
+    private ValidationResultRepository validationResultRepository;
+
+    @Autowired
+    private QualityResultRepository qualityResultRepository;
+
+    @Autowired
+    private PiiClassificationRepository piiClassificationRepository;
 
     @Test
     void deveRegistrarLinhagemPersistidaComConsentIdEResourceIdReais() {
@@ -83,5 +95,34 @@ class PipelineOrchestratorLineageTest {
                 "registro publicado não pode conter o CPF em claro");
         assertNotEquals(canonical, mascara,
                 "publicação deveria carregar o registro protegido, não o canônico em claro");
+    }
+
+    /**
+     * Gap 5 — persistência do pipeline: além da linhagem, os resultados
+     * intermediários (validação, qualidade e classificação PII) devem ser
+     * gravados em banco, não apenas mantidos em memória.
+     */
+    @Test
+    void devePersistirResultadosIntermediariosDoPipeline() {
+        long validacoesAntes = validationResultRepository.count();
+        long qualidadesAntes = qualityResultRepository.count();
+        long piiAntes = piiClassificationRepository.count();
+
+        String recordId = UUID.randomUUID().toString();
+        RawRecord raw = RawRecord.criar(recordId, "AURIX_CORE", UUID.randomUUID().toString(),
+                ResourceType.CONTA, "{\"conta\":\"1234\",\"cpf\":\"123.456.789-01\"}",
+                LocalDateTime.now(), "1.0");
+
+        PipelineOrchestrator.PipelineResult result = orchestrator.execute(
+                raw, ResourceType.CONTA, "plan-persist-test", "consent-persist-test", "resource-accounts");
+
+        assertTrue(result.isSucesso());
+
+        assertEquals(validacoesAntes + 1, validationResultRepository.count(),
+                "validação de schema deveria ser persistida");
+        assertEquals(qualidadesAntes + 1, qualityResultRepository.count(),
+                "verificação de qualidade deveria ser persistida");
+        assertEquals(piiAntes + 1, piiClassificationRepository.count(),
+                "classificação PII deveria ser persistida");
     }
 }
