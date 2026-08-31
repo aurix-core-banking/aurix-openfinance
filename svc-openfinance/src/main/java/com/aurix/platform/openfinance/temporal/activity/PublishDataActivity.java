@@ -17,6 +17,9 @@ public interface PublishDataActivity {
         private String canonicalData;
         private String lineageId;
         private int recordCount;
+        private String consentId;
+        private String executionId;
+        private String sensitivityLevel;
 
         public PublishRequest() {
         }
@@ -59,6 +62,30 @@ public interface PublishDataActivity {
 
         public void setRecordCount(int recordCount) {
             this.recordCount = recordCount;
+        }
+
+        public String getConsentId() {
+            return consentId;
+        }
+
+        public void setConsentId(String consentId) {
+            this.consentId = consentId;
+        }
+
+        public String getExecutionId() {
+            return executionId;
+        }
+
+        public void setExecutionId(String executionId) {
+            this.executionId = executionId;
+        }
+
+        public String getSensitivityLevel() {
+            return sensitivityLevel;
+        }
+
+        public void setSensitivityLevel(String sensitivityLevel) {
+            this.sensitivityLevel = sensitivityLevel;
         }
     }
 

@@ -1,5 +1,6 @@
 package com.aurix.platform.openfinance.temporal.activity;
 
+import com.aurix.platform.openfinance.event.EventEnvelope;
 import com.aurix.platform.openfinance.pipeline.lineage.service.LineageService;
 import io.temporal.activity.Activity;
 import org.slf4j.Logger;
@@ -18,6 +19,10 @@ import java.util.UUID;
  * architecture/events.yaml) e fecha a cadeia de linhagem (INV03) atualizando o
  * publicationId do registro criado na etapa de transformação — antes disso a
  * "publicação" era só um log.info sem nenhum efeito observável.
+ *
+ * <p>O evento publicado viaja envelopado com os 8 metadados obrigatórios do catálogo
+ * (EventEnvelope) e classifica o nível de sensibilidade PII do registro, para que os
+ * consumidores (data-products, subscriptions) saibam como tratar o dado.
  *
  * <p>O {@code KafkaTemplate} é opcional porque {@code KafkaConfig} (aurix-shared)
  * é {@code @Profile("!test")} — em produção/dev ele sempre está presente; em
@@ -51,16 +56,21 @@ public class PublishDataActivityImpl implements PublishDataActivity {
         try {
             String publicationId = UUID.randomUUID().toString();
 
-            Map<String, Object> event = Map.of(
+            Map<String, Object> payload = Map.of(
                     "publicationId", publicationId,
                     "nodeId", request.getNodeId(),
                     "resource", request.getResource(),
                     "recordCount", request.getRecordCount(),
                     "canonicalData", request.getCanonicalData() != null ? request.getCanonicalData() : "",
+                    "sensitivityLevel", request.getSensitivityLevel() != null
+                            ? request.getSensitivityLevel() : "PUBLIC",
                     "publishedAt", LocalDateTime.now().toString()
             );
+            Map<String, Object> event = EventEnvelope.criar(TOPIC_DATA_PUBLISHED,
+                    request.getConsentId(), request.getExecutionId(), null, null, payload);
+
             if (kafkaTemplate.isPresent()) {
-                kafkaTemplate.get().send(TOPIC_DATA_PUBLISHED, request.getNodeId(), event);
+                kafkaTemplate.get().send(TOPIC_DATA_PUBLISHED, request.getConsentId(), event);
             } else {
                 log.warn("KafkaTemplate indisponível (perfil sem Kafka) — publicação de {} não enviada",
                         request.getNodeId());

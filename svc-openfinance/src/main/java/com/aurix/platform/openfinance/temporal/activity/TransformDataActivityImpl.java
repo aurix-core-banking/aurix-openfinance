@@ -76,6 +76,8 @@ public class TransformDataActivityImpl implements TransformDataActivity {
             result.setRecordCount(request.getRecordCount());
             result.setCanonicalData(dadosParaPublicacao(pipelineResult));
             result.setLineageId(pipelineResult.getLineageRecord().getLineageId());
+            result.setSensitivityLevel(pipelineResult.getPiiResult() != null
+                    ? pipelineResult.getPiiResult().getSensitivityLevel().name() : "PUBLIC");
             result.setSuccess(true);
 
             long duration = System.currentTimeMillis() - startTime;

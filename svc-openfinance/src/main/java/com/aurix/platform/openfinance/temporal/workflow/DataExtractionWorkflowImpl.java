@@ -218,6 +218,9 @@ public class DataExtractionWorkflowImpl implements DataExtractionWorkflow {
         publishRequest.setCanonicalData(transformResult.getCanonicalData());
         publishRequest.setLineageId(transformResult.getLineageId());
         publishRequest.setRecordCount(transformResult.getRecordCount());
+        publishRequest.setConsentId(plano.getConsentId());
+        publishRequest.setExecutionId(plano.getPlanId());
+        publishRequest.setSensitivityLevel(transformResult.getSensitivityLevel());
 
         PublishDataActivity.PublishResult publishResult = publishActivity.publish(publishRequest);
 

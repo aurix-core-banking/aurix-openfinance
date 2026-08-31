@@ -76,6 +76,7 @@ public interface TransformDataActivity {
         private int recordCount;
         private String canonicalData;
         private String lineageId;
+        private String sensitivityLevel;
         private boolean success;
         private String errorMessage;
 
@@ -112,6 +113,14 @@ public interface TransformDataActivity {
 
         public void setCanonicalData(String canonicalData) {
             this.canonicalData = canonicalData;
+        }
+
+        public String getSensitivityLevel() {
+            return sensitivityLevel;
+        }
+
+        public void setSensitivityLevel(String sensitivityLevel) {
+            this.sensitivityLevel = sensitivityLevel;
         }
 
         public boolean isSuccess() {
