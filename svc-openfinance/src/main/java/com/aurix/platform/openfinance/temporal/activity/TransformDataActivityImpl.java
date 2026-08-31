@@ -16,7 +16,8 @@ import java.util.UUID;
  * Implementação da atividade de transformação de dados.
  * Delega ao PipelineOrchestrator real: Canonicalização + Validação de Schema +
  * Qualidade de Dados + Classificação PII + Linhagem (INV03) — não simula mais
- * uma string concatenada.
+ * uma string concatenada. Publica o registro com PII mascarado (PiiResult.maskedRecord),
+ * nunca o canônico sem proteção — a publicação NUNCA carrega dados pessoais em claro.
  */
 @Component
 public class TransformDataActivityImpl implements TransformDataActivity {
@@ -73,7 +74,7 @@ public class TransformDataActivityImpl implements TransformDataActivity {
             }
 
             result.setRecordCount(request.getRecordCount());
-            result.setCanonicalData(pipelineResult.getCanonicalRecord().getCanonicalData());
+            result.setCanonicalData(dadosParaPublicacao(pipelineResult));
             result.setLineageId(pipelineResult.getLineageRecord().getLineageId());
             result.setSuccess(true);
 
@@ -88,5 +89,18 @@ public class TransformDataActivityImpl implements TransformDataActivity {
             result.setErrorMessage(e.getMessage());
             return result;
         }
+    }
+
+    /**
+     * Dados a publicar: o registro mascarado pela classificação PII (INV — dados
+     * pessoais nunca saem em claro). Caso o pipeline não tenha classificado PII
+     * (defensivo), cai no canônico.
+     */
+    private String dadosParaPublicacao(PipelineOrchestrator.PipelineResult pipelineResult) {
+        if (pipelineResult.getPiiResult() != null
+                && pipelineResult.getPiiResult().getMaskedRecord() != null) {
+            return pipelineResult.getPiiResult().getMaskedRecord();
+        }
+        return pipelineResult.getCanonicalRecord().getCanonicalData();
     }
 }
