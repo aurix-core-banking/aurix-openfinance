@@ -36,6 +36,136 @@ public class ReconciliationService {
     }
 
     /**
+     * Reconcilia após a publicação: esperado = registros extraídos, atual = registros
+     * publicados por node. Idempotente — se já existir uma reconciliação para o par
+     * (planId, nodeId), atualiza-a em vez de criar uma duplicata, evitando órfãos.
+     *
+     * @param planId        ID do plano de execução.
+     * @param contagensNode mapa nodeId → contagens extraídas/publicadas.
+     * @return resultado da reconciliação.
+     */
+    public ReconciliationResult reconcileAfterPublish(String planId,
+            Map<String, NodeCounts> contagensNode) {
+        Map<String, NodeExpectedCounts> expected = new LinkedHashMap<>();
+        Map<String, Integer> actual = new LinkedHashMap<>();
+
+        for (Map.Entry<String, NodeCounts> entry : contagensNode.entrySet()) {
+            expected.put(entry.getKey(), new NodeExpectedCounts(entry.getValue().getExtracted()));
+            actual.put(entry.getKey(), entry.getValue().getPublished());
+        }
+
+        ReconciliationResult resultado = new ReconciliationResult();
+        resultado.setPlanId(planId);
+        resultado.setReconciledAt(LocalDateTime.now());
+        List<ReconciliationRecord> registros = new ArrayList<>();
+        List<String> divergencias = new ArrayList<>();
+
+        Map<String, ReconciliationRecord> existentesPorNode = new LinkedHashMap<>();
+        for (ReconciliationRecord existente : reconciliationRepository.findByPlanId(planId)) {
+            existentesPorNode.put(existente.getNodeId(), existente);
+        }
+
+        for (Map.Entry<String, NodeExpectedCounts> entry : expected.entrySet()) {
+            String nodeId = entry.getKey();
+            int esperado = entry.getValue().getCount();
+            int atual = actual.getOrDefault(nodeId, 0);
+
+            ReconciliationRecord record = existentesPorNode.get(nodeId);
+            if (record == null) {
+                record = new ReconciliationRecord();
+                record.setReconciliationId(gerarReconciliationId());
+                record.setPlanId(planId);
+                record.setNodeId(nodeId);
+                record.setDataCriacao(LocalDateTime.now());
+            }
+            record.setExpectedCount(esperado);
+            record.setActualCount(atual);
+
+            if (atual < esperado) {
+                record.setStatus(ReconciliationStatus.DIVERGENCIA_DETECTADA);
+                List<Map<String, Object>> div = new ArrayList<>();
+                div.add(divergencia("REGISTROS_FALTANTES", esperado - atual,
+                        "Esperado: " + esperado + ", Atual: " + atual));
+                record.setDivergencesJson(toJson(div));
+                divergencias.add("Node " + nodeId + ": " + (esperado - atual) + " registros faltantes");
+            } else if (atual > esperado) {
+                record.setStatus(ReconciliationStatus.DIVERGENCIA_DETECTADA);
+                List<Map<String, Object>> div = new ArrayList<>();
+                div.add(divergencia("REGISTROS_EXCEDENTES", atual - esperado,
+                        "Esperado: " + esperado + ", Atual: " + atual));
+                record.setDivergencesJson(toJson(div));
+                divergencias.add("Node " + nodeId + ": " + (atual - esperado) + " registros excedentes");
+            } else {
+                record.setStatus(ReconciliationStatus.CONCLUIDA);
+                record.setDivergencesJson("[]");
+            }
+
+            registros.add(reconciliationRepository.save(record));
+        }
+
+        resultado.setRecords(registros);
+        resultado.setDivergences(divergencias);
+        resultado.setHasDivergences(!divergencias.isEmpty());
+
+        if (!divergencias.isEmpty()) {
+            eventPublisher.publishReconciliationDivergenceDetected(planId, planId,
+                    String.join("; ", divergencias));
+        }
+
+        log.info("Reconciliação pós-publicação concluída - plano: {}, divergências: {}",
+                planId, divergencias.size());
+        return resultado;
+    }
+
+    private Map<String, Object> divergencia(String tipo, int quantidade, String detalhes) {
+        Map<String, Object> div = new LinkedHashMap<>();
+        div.put("tipo", tipo);
+        div.put("quantidade", quantidade);
+        div.put("detalhes", detalhes);
+        return div;
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            return "[]";
+        }
+    }
+
+    /**
+     * Varre registros de reconciliação órfãos/abandonados (em divergência ou falha
+     * há mais tempo que o limite) e tenta o reparo automático — evita que acumulem
+     * indefinidamente sem ação.
+     *
+     * @param maxAgeMinutes  idade mínima em minutos para um registro ser considerado órfão.
+     * @param maxRetries     máximo de tentativas de reparo por registro (via contagem de dataReparo).
+     * @return quantidade de reparos tentados.
+     */
+    public int repararOrfaos(int maxAgeMinutes, int maxRetries) {
+        List<ReconciliationRecord> orfaos = reconciliationRepository.findOrfaosByStatusAndOlderThan(
+                List.of(ReconciliationStatus.DIVERGENCIA_DETECTADA,
+                        ReconciliationStatus.FALHADA),
+                LocalDateTime.now().minusMinutes(maxAgeMinutes));
+
+        int tentados = 0;
+        for (ReconciliationRecord orfao : orfaos) {
+            if (orfao.getVersao() != null && orfao.getVersao() > maxRetries) {
+                log.info("Reparo de órfão excedeu tentativas, ignorando: {}", orfao.getReconciliationId());
+                continue;
+            }
+            try {
+                reparar(orfao.getReconciliationId());
+                tentados++;
+            } catch (Exception e) {
+                log.warn("Falha ao reparar órfão {}: {}", orfao.getReconciliationId(), e.getMessage());
+            }
+        }
+        log.info("Varredura de órfãos concluída: tentados={}", tentados);
+        return tentados;
+    }
+
+    /**
      * Compara dados esperados vs extraídos para cada node do plano.
      */
     public ReconciliationResult reconciliar(String planId, Map<String, NodeExpectedCounts> expectedCounts,
@@ -412,6 +542,28 @@ public class ReconciliationService {
 
         public void setCount(int count) {
             this.count = count;
+        }
+    }
+
+    /**
+     * Contagens de um node para reconciliar após a publicação: extraídos (esperado)
+     * vs publicados (atual).
+     */
+    public static class NodeCounts {
+        private final int extracted;
+        private final int published;
+
+        public NodeCounts(int extracted, int published) {
+            this.extracted = extracted;
+            this.published = published;
+        }
+
+        public int getExtracted() {
+            return extracted;
+        }
+
+        public int getPublished() {
+            return published;
         }
     }
 }

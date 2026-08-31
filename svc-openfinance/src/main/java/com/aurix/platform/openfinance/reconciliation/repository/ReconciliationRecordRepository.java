@@ -32,6 +32,11 @@ public interface ReconciliationRecordRepository extends JpaRepository<Reconcilia
 
     boolean existsByPlanIdAndNodeId(String planId, String nodeId);
 
+    @Query("SELECT r FROM ReconciliationRecord r WHERE r.status IN :statuses AND r.dataCriacao < :criadoAntesDe")
+    List<ReconciliationRecord> findOrfaosByStatusAndOlderThan(
+            @Param("statuses") List<ReconciliationStatus> statuses,
+            @Param("criadoAntesDe") java.time.LocalDateTime criadoAntesDe);
+
     @Query("SELECT SUM(CASE WHEN r.actualCount < r.expectedCount THEN r.expectedCount - r.actualCount ELSE 0 END) " +
             "FROM ReconciliationRecord r WHERE r.planId = :planId")
     Integer totalRegistrosFaltantes(@Param("planId") String planId);
