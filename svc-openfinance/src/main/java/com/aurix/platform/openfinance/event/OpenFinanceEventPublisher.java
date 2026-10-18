@@ -2,6 +2,8 @@ package com.aurix.platform.openfinance.event;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
@@ -28,9 +30,17 @@ public class OpenFinanceEventPublisher {
     private static final Logger log = LoggerFactory.getLogger(OpenFinanceEventPublisher.class);
 
     private final Optional<KafkaTemplate<String, Object>> kafkaTemplate;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     public OpenFinanceEventPublisher(Optional<KafkaTemplate<String, Object>> kafkaTemplate) {
+        this(kafkaTemplate, null);
+    }
+
+    @Autowired
+    public OpenFinanceEventPublisher(Optional<KafkaTemplate<String, Object>> kafkaTemplate,
+                                     ApplicationEventPublisher applicationEventPublisher) {
         this.kafkaTemplate = kafkaTemplate;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     public void publishConsentGranted(String consentId, String clientId) {
@@ -42,11 +52,22 @@ public class OpenFinanceEventPublisher {
     }
 
     public void publishConsentRevoked(String consentId, String reason) {
-        publish("consent.revoked.v1", consentId, null, null, Map.of("reason", reason));
+        String safeReason = reason != null ? reason : "Consentimento revogado";
+        Map<String, Object> envelope = publish("consent.revoked.v1", consentId, null, null,
+                Map.of("reason", safeReason));
+        if (applicationEventPublisher != null) {
+            applicationEventPublisher.publishEvent(
+                    new ConsentTerminatedEvent("consent.revoked.v1", consentId, safeReason, envelope));
+        }
     }
 
     public void publishConsentExpired(String consentId) {
-        publish("consent.expired.v1", consentId, null, null, Map.of());
+        String reason = "Consentimento expirado";
+        Map<String, Object> envelope = publish("consent.expired.v1", consentId, null, null, Map.of());
+        if (applicationEventPublisher != null) {
+            applicationEventPublisher.publishEvent(
+                    new ConsentTerminatedEvent("consent.expired.v1", consentId, reason, envelope));
+        }
     }
 
     public void publishReconciliationTriggered(String consentId, String executionPlanId) {
@@ -74,8 +95,9 @@ public class OpenFinanceEventPublisher {
      * @param executionId   ID da execução relacionada (ex: executionPlanId).
      * @param causationId   ID do evento causador — opcional.
      * @param data          payload específico do evento.
+     * @return envelope publicado.
      */
-    public void publish(String topic, String consentId, String executionId,
+    public Map<String, Object> publish(String topic, String consentId, String executionId,
             String causationId, Map<String, Object> data) {
         Map<String, Object> envelope = EventEnvelope.criar(topic, consentId, executionId,
                 null, causationId, data);
@@ -88,5 +110,6 @@ public class OpenFinanceEventPublisher {
             log.warn("KafkaTemplate indisponível (perfil sem Kafka) — evento {} de consentId={} não enviado",
                     topic, consentId);
         }
+        return envelope;
     }
 }

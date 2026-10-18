@@ -7,12 +7,19 @@ import com.aurix.platform.openfinance.pipeline.quality.entity.QualityResult.Qual
 import com.aurix.platform.openfinance.pipeline.quality.entity.QualityRule;
 import com.aurix.platform.openfinance.pipeline.quality.entity.QualityRule.QualityRuleSeverity;
 import com.aurix.platform.openfinance.pipeline.quality.entity.QualityRule.QualityRuleType;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -26,6 +33,12 @@ public class DataQualityService {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(DataQualityService.class);
     private static final int MAX_TIMELINESS_HOURS = 24;
     private static final Map<String, LocalDateTime> recentRecords = new ConcurrentHashMap<>();
+    private static final Set<String> TIPOS_CONTA_VALIDOS =
+            Set.of("CORRENTE", "POUPANCA", "SALARIO", "PAGAMENTO");
+    private static final Set<String> TIPOS_TRANSACAO_VALIDOS =
+            Set.of("CREDITO", "DEBITO", "CREDIT", "DEBIT");
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * Verifica a qualidade de um registro canônico.
@@ -173,6 +186,15 @@ public class DataQualityService {
                     issues.add(criarIssue(rule, "Dados canônicos vazios", "canonicalData"));
                 }
                 break;
+            case "ACUR002":
+                if (record.getCanonicalData() != null && record.getChecksum() != null
+                        && record.getChecksum().length() == 64) {
+                    String calculado = calcularSha256(record.getCanonicalData());
+                    if (!record.getChecksum().equalsIgnoreCase(calculado)) {
+                        issues.add(criarIssue(rule, "Checksum SHA-256 divergente do conteúdo canônico", "checksum"));
+                    }
+                }
+                break;
             case "OPOR001":
                 if (record.getCanonicalizedAt() != null) {
                     long horas = ChronoUnit.HOURS.between(record.getCanonicalizedAt(), LocalDateTime.now());
@@ -183,11 +205,59 @@ public class DataQualityService {
                     }
                 }
                 break;
+            case "CONTA001":
+                avaliarCampoDominio(record.getCanonicalData(), "accountType",
+                        valor -> valor == null || TIPOS_CONTA_VALIDOS.contains(valor.toUpperCase()),
+                        rule, "Tipo de conta inválido no registro canônico", issues);
+                break;
+            case "TRAN001":
+                avaliarCampoDominio(record.getCanonicalData(), "type",
+                        valor -> valor != null && TIPOS_TRANSACAO_VALIDOS.contains(valor.toUpperCase()),
+                        rule, "Tipo de transação inválido no registro canônico", issues);
+                break;
+            case "CART001":
+                avaliarCampoDominio(record.getCanonicalData(), "brand",
+                        valor -> valor != null && !valor.isBlank(),
+                        rule, "Bandeira do cartão ausente ou vazia", issues);
+                break;
+            case "PIX001":
+                avaliarCampoDominio(record.getCanonicalData(), "endToEndId",
+                        valor -> valor != null && !valor.isBlank(),
+                        rule, "Identificador endToEndId / chave PIX ausente ou vazio", issues);
+                break;
             default:
                 break;
         }
 
         return issues;
+    }
+
+    private void avaliarCampoDominio(final String canonicalData, final String fieldName,
+            final java.util.function.Predicate<String> validador, final QualityRule rule,
+            final String mensagemErro, final List<QualityIssue> issues) {
+        if (canonicalData == null || canonicalData.isBlank()) {
+            return;
+        }
+        try {
+            JsonNode node = objectMapper.readTree(canonicalData);
+            JsonNode fieldNode = node.get(fieldName);
+            String valor = (fieldNode == null || fieldNode.isNull()) ? null : fieldNode.asText();
+            if (!validador.test(valor)) {
+                issues.add(criarIssue(rule, mensagemErro, fieldName));
+            }
+        } catch (Exception e) {
+            issues.add(criarIssue(rule, "Payload canônico inválido ao avaliar " + fieldName, fieldName));
+        }
+    }
+
+    private String calcularSha256(final String conteudo) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(conteudo.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("Algoritmo SHA-256 não disponível", e);
+        }
     }
 
     /**

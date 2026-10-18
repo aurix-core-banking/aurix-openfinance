@@ -1,5 +1,7 @@
 package com.aurix.platform.openfinance.planner.service;
 
+import com.aurix.platform.openfinance.context.service.AuthorizedContextService;
+import com.aurix.platform.openfinance.event.ConsentTerminatedEvent;
 import com.aurix.platform.openfinance.planner.dto.PlanRequest;
 import com.aurix.platform.openfinance.planner.dto.PlanResponse;
 import com.aurix.platform.openfinance.planner.entity.ExecutionPlan;
@@ -13,6 +15,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.EventListener;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,11 +62,20 @@ public class ExtractionPlannerService {
 
     private final ExecutionPlanRepository planRepository;
     private final WorkflowExecutionDispatcher dispatcher;
+    private final AuthorizedContextService authorizedContextService;
 
     public ExtractionPlannerService(ExecutionPlanRepository planRepository,
                                     WorkflowExecutionDispatcher dispatcher) {
+        this(planRepository, dispatcher, null);
+    }
+
+    @Autowired
+    public ExtractionPlannerService(ExecutionPlanRepository planRepository,
+                                    WorkflowExecutionDispatcher dispatcher,
+                                    AuthorizedContextService authorizedContextService) {
         this.planRepository = planRepository;
         this.dispatcher = dispatcher;
+        this.authorizedContextService = authorizedContextService;
     }
 
     /**
@@ -205,6 +219,54 @@ public class ExtractionPlannerService {
 
         plano.setStatus(PlanStatus.CANCELADO);
         return planRepository.save(plano);
+    }
+
+    /**
+     * Cancela todos os planos em aberto (CRIADO ou EM_EXECUCAO) e revoga os contextos
+     * autorizados do consentimento informado (fluxo consent-revocation de architecture/flows.yaml).
+     */
+    public int cancelarPlanosPorConsentimento(String consentId, String motivo) {
+        if (authorizedContextService != null) {
+            authorizedContextService.revokeAllByConsent(consentId);
+        }
+
+        List<ExecutionPlan> planos = planRepository.findByConsentId(consentId);
+        int cancelados = 0;
+        for (ExecutionPlan plano : planos) {
+            if (plano.getStatus() == PlanStatus.CRIADO || plano.getStatus() == PlanStatus.EM_EXECUCAO) {
+                plano.setStatus(PlanStatus.CANCELADO);
+                plano.setDataConclusao(LocalDateTime.now());
+                planRepository.save(plano);
+                cancelados++;
+            }
+        }
+        log.info("Revogação em cascata para consentId={}: planosCancelados={}, motivo={}",
+                consentId, cancelados, motivo);
+        return cancelados;
+    }
+
+    @EventListener
+    public void onConsentTerminated(ConsentTerminatedEvent event) {
+        if (event != null && event.consentId() != null) {
+            cancelarPlanosPorConsentimento(event.consentId(), event.reason());
+        }
+    }
+
+    @KafkaListener(
+            topics = {"consent.revoked.v1", "consent.expired.v1"},
+            groupId = "aurix-openfinance-consent-revocation-group"
+    )
+    public void onConsentTerminatedKafka(Map<String, Object> envelope) {
+        if (envelope == null) {
+            return;
+        }
+        Object consentIdObj = envelope.get("consentId");
+        if (consentIdObj == null) {
+            return;
+        }
+        Object reasonObj = envelope.get("reason");
+        String reason = reasonObj != null ? reasonObj.toString() : "Consentimento encerrado via evento";
+        cancelarPlanosPorConsentimento(consentIdObj.toString(), reason);
     }
 
     public void atualizarStatus(String planId, PlanStatus novoStatus) {

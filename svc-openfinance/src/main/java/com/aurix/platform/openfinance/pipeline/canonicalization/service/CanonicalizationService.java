@@ -41,13 +41,30 @@ public class CanonicalizationService {
     private static final Set<String> BANDEIRAS_CARTAO = Set.of("MASTERCARD", "VISA", "ELO", "AMEX");
     private static final Set<String> STATUS_CARTAO = Set.of("ATIVO", "BLOQUEADO", "CANCELADO");
     private static final Set<String> STATUS_PIX = Set.of("PENDENTE", "LIQUIDADO", "DEVOLVIDO");
+    private static final Set<String> TIPOS_CREDITO = Set.of("CONSIGNADO", "PESSOAL", "FINANCIAMENTO");
+    private static final Set<String> STATUS_CREDITO = Set.of("ATIVO", "QUITADO", "ATRASADO");
+    private static final Set<String> TIPOS_INVESTIMENTO = Set.of("CDB", "LCI", "LCA", "FUNDO", "TESOURO");
+    private static final Set<String> STATUS_INVESTIMENTO = Set.of("ATIVO", "RESGATADO", "VENCIDO");
+
+    private static final List<String> CHAVES_ENVELOPE = List.of(
+            "contas", "transacoes", "cartoes", "faturas", "transacoes_cartao",
+            "emprestimos", "transacoes_pix", "investimentos", "records", "items", "data");
 
     private static final Map<String, String> SINONIMOS_TIPO_CONTA = Map.ofEntries(
             Map.entry("CORRENTE", "CONTA_CORRENTE"),
             Map.entry("CC", "CONTA_CORRENTE"),
             Map.entry("CONTA_CORRENTE", "CONTA_CORRENTE"),
+            Map.entry("CONTA_DE_DEPOSITO", "CONTA_CORRENTE"),
+            Map.entry("DEPOSITO", "CONTA_CORRENTE"),
             Map.entry("POUPANCA", "POUPANCA"),
             Map.entry("SALARIO", "SALARIO"));
+    private static final Map<String, String> SINONIMOS_STATUS_CONTA = Map.ofEntries(
+            Map.entry("ACTIVE", "ATIVA"),
+            Map.entry("INACTIVE", "INATIVA"),
+            Map.entry("BLOCKED", "BLOQUEADA"));
+    private static final Map<String, String> SINONIMOS_TIPO_TRANSACAO = Map.ofEntries(
+            Map.entry("CREDIT", "CREDITO"),
+            Map.entry("DEBIT", "DEBITO"));
     private static final Map<String, String> SINONIMOS_BANDEIRA = Map.ofEntries(
             Map.entry("MASTERCARD", "MASTERCARD"),
             Map.entry("MASTER", "MASTERCARD"),
@@ -55,6 +72,41 @@ public class CanonicalizationService {
             Map.entry("ELO", "ELO"),
             Map.entry("AMEX", "AMEX"),
             Map.entry("AMERICAN_EXPRESS", "AMEX"));
+    private static final Map<String, String> SINONIMOS_STATUS_CARTAO = Map.ofEntries(
+            Map.entry("ACTIVE", "ATIVO"),
+            Map.entry("BLOCKED", "BLOQUEADO"),
+            Map.entry("CANCELLED", "CANCELADO"),
+            Map.entry("CANCELED", "CANCELADO"));
+    private static final Map<String, String> SINONIMOS_STATUS_PIX = Map.ofEntries(
+            Map.entry("COMPLETED", "LIQUIDADO"),
+            Map.entry("SETTLED", "LIQUIDADO"),
+            Map.entry("PENDING", "PENDENTE"),
+            Map.entry("RETURNED", "DEVOLVIDO"),
+            Map.entry("REFUNDED", "DEVOLVIDO"));
+    private static final Map<String, String> SINONIMOS_TIPO_CREDITO = Map.ofEntries(
+            Map.entry("PERSONAL", "PESSOAL"),
+            Map.entry("CREDITO_PESSOAL", "PESSOAL"),
+            Map.entry("EMPRESTIMO_PESSOAL", "PESSOAL"),
+            Map.entry("PAYROLL", "CONSIGNADO"),
+            Map.entry("CREDITO_CONSIGNADO", "CONSIGNADO"),
+            Map.entry("FINANCING", "FINANCIAMENTO"),
+            Map.entry("IMOBILIARIO", "FINANCIAMENTO"),
+            Map.entry("VEICULO", "FINANCIAMENTO"));
+    private static final Map<String, String> SINONIMOS_STATUS_CREDITO = Map.ofEntries(
+            Map.entry("ACTIVE", "ATIVO"),
+            Map.entry("PAID", "QUITADO"),
+            Map.entry("LIQUIDADO", "QUITADO"),
+            Map.entry("OVERDUE", "ATRASADO"),
+            Map.entry("EM_ATRASO", "ATRASADO"));
+    private static final Map<String, String> SINONIMOS_TIPO_INVESTIMENTO = Map.ofEntries(
+            Map.entry("TESOURO_DIRETO", "TESOURO"),
+            Map.entry("FUNDO_INVESTIMENTO", "FUNDO"),
+            Map.entry("RENDA_FIXA", "CDB"));
+    private static final Map<String, String> SINONIMOS_STATUS_INVESTIMENTO = Map.ofEntries(
+            Map.entry("ACTIVE", "ATIVO"),
+            Map.entry("REDEEMED", "RESGATADO"),
+            Map.entry("EXPIRED", "VENCIDO"),
+            Map.entry("MATURED", "VENCIDO"));
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -82,6 +134,12 @@ public class CanonicalizationService {
             case PIX:
                 canonicalData = canonicalizePix(raw.getRawData());
                 break;
+            case CREDITO:
+                canonicalData = canonicalizeCredito(raw.getRawData());
+                break;
+            case INVESTIMENTO:
+                canonicalData = canonicalizeInvestimento(raw.getRawData());
+                break;
             default:
                 canonicalData = raw.getRawData();
                 break;
@@ -108,13 +166,13 @@ public class CanonicalizationService {
     public String canonicalizeConta(final String rawData) {
         log.debug("Canonicalizando dados de conta");
         return mapearCampos(rawData, List.of(
-                campo("accountId", "accountId", "idConta", "contaId", "id"),
+                campo("accountId", "accountId", "idConta", "contaId", "conta", "id"),
                 campo("documentNumber", "documentNumber", "cpfCnpj", "cpf", "cnpj", "documento", "cpfNumber", "companyCnpj"),
-                campo("accountType", TipoCampo.ENUM, SINONIMOS_TIPO_CONTA, TIPOS_CONTA, "accountType", "tipoConta", "tipo", "contaTipo"),
+                campo("accountType", TipoCampo.ENUM, SINONIMOS_TIPO_CONTA, TIPOS_CONTA, "accountType", "tipoConta", "tipo", "type", "contaTipo"),
                 campo("agency", "agency", "agencia", "branchCode"),
-                campo("number", "number", "numero", "numeroConta", "accountNumber"),
-                campo("status", TipoCampo.ENUM, null, STATUS_CONTA, "status", "statusConta"),
-                campo("createdAt", TipoCampo.DATA, "createdAt", "dataCriacao", "dataAbertura", "openDate", "dataAtualizacao")));
+                campo("number", "number", "numero", "numeroConta", "accountNumber", "conta"),
+                campo("status", TipoCampo.ENUM, SINONIMOS_STATUS_CONTA, STATUS_CONTA, "status", "statusConta"),
+                campo("createdAt", TipoCampo.DATA, "createdAt", "dataCriacao", "dataAbertura", "openDate", "dataAtualizacao", "updatedAt")));
     }
 
     /**
@@ -129,11 +187,11 @@ public class CanonicalizationService {
         return mapearCampos(rawData, List.of(
                 campo("transactionId", "transactionId", "idTransacao", "transacaoId", "id"),
                 campo("accountId", "accountId", "contaId", "idConta"),
-                campo("type", TipoCampo.ENUM, null, TIPOS_TRANSACAO, "type", "tipo", "tipoTransacao"),
+                campo("type", TipoCampo.ENUM, SINONIMOS_TIPO_TRANSACAO, TIPOS_TRANSACAO, "type", "tipo", "tipoTransacao"),
                 campo("amount", TipoCampo.DECIMAL, "amount", "valor", "value", "montante"),
-                campo("description", "description", "descricao", "estabelecimento", "text"),
+                campo("description", "description", "descricao", "estabelecimento", "merchant", "text"),
                 campo("merchantCategoryCode", "merchantCategoryCode", "mcc", "categoriaEstabelecimento"),
-                campo("timestamp", TipoCampo.DATA, "timestamp", "dataTransacao", "dataProcessamento", "data", "date")));
+                campo("timestamp", TipoCampo.DATA, "timestamp", "dataTransacao", "transactionDate", "dataProcessamento", "processingDate", "data", "date")));
     }
 
     /**
@@ -147,13 +205,13 @@ public class CanonicalizationService {
     public String canonicalizeCartao(final String rawData) {
         log.debug("Canonicalizando dados de cartão");
         return mapearCampos(rawData, List.of(
-                campo("cardId", "cardId", "idCartao", "id"),
-                campo("documentNumber", "documentNumber", "cpf", "cnpj", "documento"),
+                campo("cardId", "cardId", "idCartao", "billId", "transactionId", "id"),
+                campo("documentNumber", "documentNumber", "customerId", "cpf", "cnpj", "documento"),
                 campo("brand", TipoCampo.ENUM, SINONIMOS_BANDEIRA, BANDEIRAS_CARTAO, "brand", "bandeira", "brandName"),
-                campo("cardNumber", "cardNumber", "numero", "numeroCartao", "pan"),
-                campo("status", TipoCampo.ENUM, null, STATUS_CARTAO, "status", "statusCartao"),
-                campo("creditLimit", TipoCampo.DECIMAL, "creditLimit", "limite", "limiteCredito", "limit"),
-                campo("availableLimit", TipoCampo.DECIMAL, "availableLimit", "limiteDisponivel", "available", "disponivel")));
+                campo("cardNumber", "cardNumber", "numero", "numeroCartao", "lastDigits", "pan"),
+                campo("status", TipoCampo.ENUM, SINONIMOS_STATUS_CARTAO, STATUS_CARTAO, "status", "statusCartao"),
+                campo("creditLimit", TipoCampo.DECIMAL, "creditLimit", "limite", "limiteCredito", "totalAmount", "amount", "limit"),
+                campo("availableLimit", TipoCampo.DECIMAL, "availableLimit", "limiteDisponivel", "paidAmount", "available", "disponivel")));
     }
 
     /**
@@ -166,32 +224,64 @@ public class CanonicalizationService {
         log.debug("Canonicalizando dados PIX");
         return mapearCampos(rawData, List.of(
                 campo("pixId", "pixId", "idPix", "id"),
-                campo("endToEndId", "endToEndId", "e2eId", "endToEnd"),
-                campo("payerAccountId", "payerAccountId", "contaOrigem", "payerAccount", "contaPagador", "idContaOrigem"),
-                campo("payeeAccountId", "payeeAccountId", "contaDestino", "payeeAccount", "contaRecebedor", "idContaDestino"),
+                campo("endToEndId", "endToEndId", "e2eId", "endToEnd", "pixKey"),
+                campo("payerAccountId", "payerAccountId", "contaOrigem", "payerAccount", "contaPagador", "idContaOrigem", "customerId"),
+                campo("payeeAccountId", "payeeAccountId", "contaDestino", "payeeAccount", "contaRecebedor", "idContaDestino", "pixKey"),
                 campo("amount", TipoCampo.DECIMAL, "amount", "valor", "value"),
-                campo("status", TipoCampo.ENUM, null, STATUS_PIX, "status", "situacao"),
-                campo("timestamp", TipoCampo.DATA, "timestamp", "dataRegistro", "data", "createdAt")));
+                campo("status", TipoCampo.ENUM, SINONIMOS_STATUS_PIX, STATUS_PIX, "status", "situacao"),
+                campo("timestamp", TipoCampo.DATA, "timestamp", "dataRegistro", "transactionDate", "data", "createdAt", "updatedAt")));
+    }
+
+    /**
+     * Canonicaliza dados de crédito/empréstimo conforme {@code data-models.yaml} ({@code loan}).
+     *
+     * @param rawData dados brutos JSON.
+     * @return JSON canônico.
+     */
+    public String canonicalizeCredito(final String rawData) {
+        log.debug("Canonicalizando dados de crédito/empréstimo");
+        return mapearCampos(rawData, List.of(
+                campo("loanId", "loanId", "idEmprestimo", "emprestimoId", "contractId", "numeroContrato", "id"),
+                campo("documentNumber", "documentNumber", "customerId", "cpfCnpj", "cpf", "cnpj", "documento"),
+                campo("type", TipoCampo.ENUM, SINONIMOS_TIPO_CREDITO, TIPOS_CREDITO, "type", "tipo", "tipoEmprestimo", "modalidade"),
+                campo("principalAmount", TipoCampo.DECIMAL, "principalAmount", "contractedAmount", "valorContratado", "valorPrincipal", "amount", "valor"),
+                campo("interestRate", TipoCampo.DECIMAL, "interestRate", "taxaJuros", "taxa", "juros"),
+                campo("termMonths", "termMonths", "prazoMeses", "totalParcelas", "parcelas", "prazo"),
+                campo("status", TipoCampo.ENUM, SINONIMOS_STATUS_CREDITO, STATUS_CREDITO, "status", "statusEmprestimo", "situacao")));
+    }
+
+    /**
+     * Canonicaliza dados de investimento conforme {@code data-models.yaml} ({@code investment}).
+     *
+     * @param rawData dados brutos JSON.
+     * @return JSON canônico.
+     */
+    public String canonicalizeInvestimento(final String rawData) {
+        log.debug("Canonicalizando dados de investimento");
+        return mapearCampos(rawData, List.of(
+                campo("investmentId", "investmentId", "idInvestimento", "investimentoId", "id"),
+                campo("documentNumber", "documentNumber", "customerId", "cpfCnpj", "cpf", "cnpj", "documento"),
+                campo("type", TipoCampo.ENUM, SINONIMOS_TIPO_INVESTIMENTO, TIPOS_INVESTIMENTO, "type", "tipo", "tipoInvestimento", "product", "produto"),
+                campo("currentValue", TipoCampo.DECIMAL, "currentValue", "totalValue", "valorAtual", "valorTotal", "saldoBruto"),
+                campo("appliedAmount", TipoCampo.DECIMAL, "appliedAmount", "unitValue", "valorAplicado", "valorInvestido", "principal"),
+                campo("status", TipoCampo.ENUM, SINONIMOS_STATUS_INVESTIMENTO, STATUS_INVESTIMENTO, "status", "statusInvestimento", "situacao")));
     }
 
     /**
      * Mapeia os campos presentes no JSON bruto para o modelo canônico,
-     * resolvendo os valores pelas aliases (tolerantes a camelCase/snake_case)
-     * e normalizando conforme o tipo do campo.
+     * resolvendo os valores pelas aliases (tolerantes a camelCase/snake_case),
+     * desempacotando envelopes gerados pelos extractors e normalizando conforme o tipo do campo.
      *
      * @param rawDataJSON dados brutos JSON.
-     * @param campos       definição dos campos canônicos.
-     * @return JSON canônico array-escrito.
+     * @param campos      definição dos campos canônicos.
+     * @return JSON canônico escrito.
      */
     private String mapearCampos(final String rawDataJSON, final List<CampoCanonico> campos) {
         if (rawDataJSON == null || rawDataJSON.isBlank()) {
             return rawDataJSON;
         }
         try {
-            JsonNode node = objectMapper.readTree(rawDataJSON);
-            if (node != null && node.isArray() && node.size() > 0) {
-                node = node.get(0);
-            }
+            JsonNode node = desempacotarNodo(objectMapper.readTree(rawDataJSON));
             if (node == null || !node.isObject()) {
                 log.warn("Dados brutos não são um objeto JSON; mantendo conteúdo original: {}", abreviar(rawDataJSON));
                 return rawDataJSON;
@@ -223,6 +313,27 @@ public class CanonicalizationService {
             log.warn("Falha ao canonicalizar dados brutos; mantendo conteúdo original: {}", e.getMessage());
             return rawDataJSON;
         }
+    }
+
+    /**
+     * Desempacota arrays na raiz ou envelopes de extractors (ex.: {"contas": [...]}).
+     */
+    private JsonNode desempacotarNodo(final JsonNode root) {
+        if (root == null) {
+            return null;
+        }
+        if (root.isArray() && root.size() > 0) {
+            return root.get(0);
+        }
+        if (root.isObject()) {
+            for (String chaveEnvelope : CHAVES_ENVELOPE) {
+                JsonNode candidato = root.get(chaveEnvelope);
+                if (candidato != null && candidato.isArray() && candidato.size() > 0) {
+                    return candidato.get(0);
+                }
+            }
+        }
+        return root;
     }
 
     /**
