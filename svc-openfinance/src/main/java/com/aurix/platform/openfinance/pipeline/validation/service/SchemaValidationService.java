@@ -3,6 +3,8 @@ package com.aurix.platform.openfinance.pipeline.validation.service;
 import com.aurix.platform.openfinance.pipeline.ResourceType;
 import com.aurix.platform.openfinance.pipeline.canonicalization.entity.CanonicalRecord;
 import com.aurix.platform.openfinance.pipeline.validation.entity.ValidationResult;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -19,6 +21,8 @@ public class SchemaValidationService {
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SchemaValidationService.class);
     private static final String DEFAULT_SCHEMA_VERSION = "1.0";
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * Registros de schemas registrados (simulação do Schema Registry).
@@ -55,6 +59,8 @@ public class SchemaValidationService {
 
         if (record.getCanonicalData() == null || record.getCanonicalData().isBlank()) {
             errors.add("Dados canônicos não podem ser nulos ou vazios");
+        } else {
+            validarJsonCanonico(record.getCanonicalData(), schema, errors);
         }
 
         if (record.getCanonicalId() == null || record.getCanonicalId().isBlank()) {
@@ -84,6 +90,32 @@ public class SchemaValidationService {
         log.info("Validação concluída: válido={}, erros={}, avisos={}",
                 resultado.isValid(), errors.size(), warnings.size());
         return resultado;
+    }
+
+    private void validarJsonCanonico(final String canonicalData, final Schema schema, final List<String> errors) {
+        try {
+            JsonNode root = objectMapper.readTree(canonicalData);
+            if (!root.isObject()) {
+                errors.add("Payload canônico deve ser um objeto JSON");
+                return;
+            }
+            List<String> requiredFields = schema.getRequiredFields();
+            for (String campo : requiredFields) {
+                if (!root.has(campo)) {
+                    errors.add("Campo canônico obrigatório ausente no schema: " + campo);
+                }
+            }
+            if (!requiredFields.isEmpty()) {
+                String campoIdentificadorPrimario = requiredFields.get(0);
+                JsonNode idNode = root.get(campoIdentificadorPrimario);
+                if (idNode == null || idNode.isNull() || idNode.asText().isBlank()) {
+                    errors.add("Identificador primário canônico '" + campoIdentificadorPrimario
+                            + "' não pode ser nulo ou vazio");
+                }
+            }
+        } catch (Exception e) {
+            errors.add("Payload canônico não é um JSON válido: " + e.getMessage());
+        }
     }
 
     /**
@@ -158,27 +190,32 @@ public class SchemaValidationService {
     }
 
     /**
-     * Retorna os campos obrigatórios por tipo de recurso.
+     * Retorna os campos canônicos obrigatórios por tipo de recurso conforme architecture/data-models.yaml.
      *
      * @param type tipo de recurso.
-     * @return lista de campos obrigatórios.
+     * @return lista de campos canônicos obrigatórios.
      */
     private List<String> camposObrigatoriosPorTipo(final ResourceType type) {
         switch (type) {
             case CONTA:
-                return List.of("canonicalId", "rawRecordId", "resourceType", "canonicalData",
-                        "version", "checksum");
+                return List.of("accountId", "documentNumber", "accountType", "agency",
+                        "number", "status", "createdAt");
             case TRANSACAO:
-                return List.of("canonicalId", "rawRecordId", "resourceType", "canonicalData",
-                        "version", "checksum");
+                return List.of("transactionId", "accountId", "type", "amount", "timestamp");
             case CARTAO:
-                return List.of("canonicalId", "rawRecordId", "resourceType", "canonicalData",
-                        "version", "checksum");
+                return List.of("cardId", "documentNumber", "brand", "cardNumber",
+                        "status", "creditLimit", "availableLimit");
             case PIX:
-                return List.of("canonicalId", "rawRecordId", "resourceType", "canonicalData",
-                        "version", "checksum");
+                return List.of("pixId", "endToEndId", "payerAccountId", "payeeAccountId",
+                        "amount", "status", "timestamp");
+            case CREDITO:
+                return List.of("loanId", "documentNumber", "type", "principalAmount",
+                        "interestRate", "termMonths", "status");
+            case INVESTIMENTO:
+                return List.of("investmentId", "documentNumber", "type", "currentValue",
+                        "appliedAmount", "status");
             default:
-                return List.of("canonicalId", "rawRecordId", "resourceType", "canonicalData");
+                return List.of();
         }
     }
 

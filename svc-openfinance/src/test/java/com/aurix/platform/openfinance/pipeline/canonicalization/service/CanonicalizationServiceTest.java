@@ -148,4 +148,66 @@ class CanonicalizationServiceTest {
         assertEquals("1.0", record.getVersion());
         assertNotNull(record.getChecksum());
     }
+
+    @Test
+    void canonicalizeDesempacotaEnvelopeDoExtractorDeContas() throws Exception {
+        String envelopeExtractor = """
+                {"contas":[{"accountId":"acc-e2e-1","institutionCode":"AURIX","currency":"BRL",
+                            "type":"CONTA_DE_DEPOSITO","status":"ACTIVE","updatedAt":"2026-08-30T10:00:00"}],
+                 "transacoes":[]}
+                """;
+        RawRecord raw = RawRecord.criar("rec-env-1", "AURIX_CORE", "node-contas",
+                ResourceType.CONTA, envelopeExtractor, LocalDateTime.now(), "1.0");
+
+        CanonicalRecord record = service.canonicalize(raw, ResourceType.CONTA);
+        JsonNode resultado = mapper.readTree(record.getCanonicalData());
+
+        assertEquals("acc-e2e-1", resultado.get("accountId").asText());
+        assertEquals("CONTA_CORRENTE", resultado.get("accountType").asText());
+        assertEquals("ATIVA", resultado.get("status").asText());
+        assertEquals("2026-08-30T10:00:00", resultado.get("createdAt").asText());
+    }
+
+    @Test
+    void canonicalizeCreditoMapeiaCamposEConverteEnums() throws Exception {
+        String envelopeEmprestimo = """
+                {"emprestimos":[{"loanId":"loan-1","customerId":"12345678909",
+                                 "type":"CREDITO_PESSOAL","contractedAmount":"25000,00",
+                                 "interestRate":"1,85","termMonths":36,"status":"ACTIVE"}]}
+                """;
+        RawRecord raw = RawRecord.criar("rec-loan-1", "AURIX_CORE", "node-emprestimos",
+                ResourceType.CREDITO, envelopeEmprestimo, LocalDateTime.now(), "1.0");
+
+        CanonicalRecord record = service.canonicalize(raw, ResourceType.CREDITO);
+        JsonNode resultado = mapper.readTree(record.getCanonicalData());
+
+        assertEquals("loan-1", resultado.get("loanId").asText());
+        assertEquals("12345678909", resultado.get("documentNumber").asText());
+        assertEquals("PESSOAL", resultado.get("type").asText());
+        assertEquals("25000.00", resultado.get("principalAmount").asText());
+        assertEquals("1.85", resultado.get("interestRate").asText());
+        assertEquals("36", resultado.get("termMonths").asText());
+        assertEquals("ATIVO", resultado.get("status").asText());
+    }
+
+    @Test
+    void canonicalizeInvestimentoMapeiaCamposEConverteEnums() throws Exception {
+        String envelopeInvestimento = """
+                {"investimentos":[{"investmentId":"inv-1","customerId":"12345678909",
+                                   "type":"TESOURO_DIRETO","totalValue":"10500,50",
+                                   "unitValue":"10000,00","status":"ACTIVE"}]}
+                """;
+        RawRecord raw = RawRecord.criar("rec-inv-1", "AURIX_CORE", "node-investimentos",
+                ResourceType.INVESTIMENTO, envelopeInvestimento, LocalDateTime.now(), "1.0");
+
+        CanonicalRecord record = service.canonicalize(raw, ResourceType.INVESTIMENTO);
+        JsonNode resultado = mapper.readTree(record.getCanonicalData());
+
+        assertEquals("inv-1", resultado.get("investmentId").asText());
+        assertEquals("12345678909", resultado.get("documentNumber").asText());
+        assertEquals("TESOURO", resultado.get("type").asText());
+        assertEquals("10500.50", resultado.get("currentValue").asText());
+        assertEquals("10000.00", resultado.get("appliedAmount").asText());
+        assertEquals("ATIVO", resultado.get("status").asText());
+    }
 }

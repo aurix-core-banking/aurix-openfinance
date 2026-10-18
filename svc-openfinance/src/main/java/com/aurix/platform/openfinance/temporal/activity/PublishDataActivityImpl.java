@@ -1,10 +1,13 @@
 package com.aurix.platform.openfinance.temporal.activity;
 
+import com.aurix.platform.openfinance.event.DataPublishedEvent;
 import com.aurix.platform.openfinance.event.EventEnvelope;
 import com.aurix.platform.openfinance.pipeline.lineage.service.LineageService;
 import io.temporal.activity.Activity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
@@ -36,11 +39,20 @@ public class PublishDataActivityImpl implements PublishDataActivity {
 
     private final Optional<KafkaTemplate<String, Object>> kafkaTemplate;
     private final LineageService lineageService;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     public PublishDataActivityImpl(Optional<KafkaTemplate<String, Object>> kafkaTemplate,
                                     LineageService lineageService) {
+        this(kafkaTemplate, lineageService, null);
+    }
+
+    @Autowired
+    public PublishDataActivityImpl(Optional<KafkaTemplate<String, Object>> kafkaTemplate,
+                                    LineageService lineageService,
+                                    ApplicationEventPublisher applicationEventPublisher) {
         this.kafkaTemplate = kafkaTemplate;
         this.lineageService = lineageService;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     @Override
@@ -74,6 +86,10 @@ public class PublishDataActivityImpl implements PublishDataActivity {
             } else {
                 log.warn("KafkaTemplate indisponível (perfil sem Kafka) — publicação de {} não enviada",
                         request.getNodeId());
+            }
+
+            if (applicationEventPublisher != null) {
+                applicationEventPublisher.publishEvent(new DataPublishedEvent(event));
             }
 
             if (request.getLineageId() != null) {

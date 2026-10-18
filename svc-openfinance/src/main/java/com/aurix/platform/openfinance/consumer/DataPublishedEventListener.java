@@ -2,14 +2,20 @@ package com.aurix.platform.openfinance.consumer;
 
 import com.aurix.platform.openfinance.distribution.dataproduct.entity.DataProduct;
 import com.aurix.platform.openfinance.distribution.dataproduct.repository.DataProductRepository;
+import com.aurix.platform.openfinance.distribution.dataproduct.service.DataProductService;
 import com.aurix.platform.openfinance.distribution.subscription.service.SubscriptionService;
+import com.aurix.platform.openfinance.event.DataPublishedEvent;
+import com.aurix.platform.openfinance.pipeline.canonicalization.entity.CanonicalRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.EventListener;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Consome o evento {@code data.published.v1} do event bus e conecta a distribuição:
@@ -26,11 +32,27 @@ public class DataPublishedEventListener {
 
     private final DataProductRepository dataProductRepository;
     private final SubscriptionService subscriptionService;
+    private final DataProductService dataProductService;
 
     public DataPublishedEventListener(DataProductRepository dataProductRepository,
                                       SubscriptionService subscriptionService) {
+        this(dataProductRepository, subscriptionService, null);
+    }
+
+    @Autowired
+    public DataPublishedEventListener(DataProductRepository dataProductRepository,
+                                      SubscriptionService subscriptionService,
+                                      DataProductService dataProductService) {
         this.dataProductRepository = dataProductRepository;
         this.subscriptionService = subscriptionService;
+        this.dataProductService = dataProductService;
+    }
+
+    @EventListener
+    public void onDataPublishedSpringEvent(DataPublishedEvent event) {
+        if (event != null && event.envelope() != null) {
+            onDataPublished(event.envelope());
+        }
     }
 
     /**
@@ -55,7 +77,18 @@ public class DataPublishedEventListener {
             return;
         }
 
+        Object canonicalDataObj = envelope.get("canonicalData");
+        String canonicalData = canonicalDataObj != null ? canonicalDataObj.toString() : "";
+        Object pubIdObj = envelope.get("publicationId");
+        String recordId = pubIdObj != null ? pubIdObj.toString() : UUID.randomUUID().toString();
+
         for (DataProduct produto : produtos) {
+            if (dataProductService != null && !canonicalData.isBlank()) {
+                CanonicalRecord record = new CanonicalRecord();
+                record.setCanonicalId(recordId);
+                record.setCanonicalData(canonicalData);
+                dataProductService.materialize(produto, List.of(record));
+            }
             subscriptionService.notifySubscribers(produto.getProductId(), EVENT_TYPE, envelope);
         }
 

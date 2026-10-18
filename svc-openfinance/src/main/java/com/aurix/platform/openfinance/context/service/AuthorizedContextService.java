@@ -115,6 +115,20 @@ public class AuthorizedContextService {
     }
 
     /**
+     * Revoga todos os contextos ativos associados a um consentimento (fluxo consent-revocation).
+     */
+    @Transactional
+    public int revokeAllByConsent(String consentId) {
+        List<AuthorizedContext> ativos = contextRepository.findActiveContexts(consentId);
+        for (AuthorizedContext ctx : ativos) {
+            ctx.revoke();
+            contextRepository.save(ctx);
+        }
+        log.info("Contextos autorizados revogados para consentId={}: total={}", consentId, ativos.size());
+        return ativos.size();
+    }
+
+    /**
      * Lista contextos ativos para um consentimento.
      */
     @Transactional(readOnly = true)
