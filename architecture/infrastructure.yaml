@@ -47,30 +47,57 @@ runtime:
       port: 5432
       database: aurix_db
       schema: aurix
+      # Migrations V3, V6 e V11 criam tabelas no schema aurix_openfinance;
+      # V4 e V7 não qualificam schema (search_path). Ver db/migration.
+      additionalSchemas:
+        - aurix_openfinance
       features:
         - connection-pooling
         - read-replicas
         - wal-archiving
         - point-in-time-recovery
+      # Nomes não qualificados. Deve bater exatamente com os CREATE TABLE de
+      # svc-openfinance/src/main/resources/db/migration (verificado por
+      # ArchitectureRulesComplianceTest), e toda @Entity deve mapear uma delas.
       tables:
-        - consentimentos
+        # Consent Plane
+        - consentimento
+        - consentimento_versao
+        - consent_receipts
         - policy_rules
         - policy_decisions
         - authorized_contexts
-        - resource_nodes
         - resource_graphs
+        - resource_nodes
         - resource_edges
+        # Dados consentidos (fontes por domínio)
+        - conta_consentida
+        - transacao_consentida
+        - pessoa_consentida
+        - cartao_consentido
+        - fatura_consentida
+        - transacao_cartao_consentida
+        - emprestimo_consentido
+        - seguro_consentido
+        - pix_consentido
+        - investimento_consentido
+        # Execution Plane
         - execution_plans
         - plan_nodes
         - plan_edges
         - reconciliation_records
+        - reconciliation_divergences
+        # Data Plane
         - raw_records
         - canonical_records
         - validation_results
         - quality_results
+        - quality_issues
         - pii_classifications
         - lineage_records
+        # Distribution Plane
         - data_products
+        - data_product_records
         - subscriptions
 
     clickhouse:

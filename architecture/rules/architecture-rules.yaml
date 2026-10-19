@@ -1,5 +1,12 @@
 # Architecture Compliance Rules
 # Validação automática do modelo de arquitetura
+#
+# specVersion 2.0 — seletores alinhados a architecture/architecture.yaml (v2.0)
+# e architecture/infrastructure.yaml. Cada regra é avaliada em CI por
+# ArchitectureRulesComplianceTest (svc-openfinance/src/test/java/.../architecture),
+# que falha se alguma regra listada aqui não tiver verificação correspondente.
+
+specVersion: "2.0"
 
 rules:
 
@@ -10,22 +17,23 @@ rules:
     severity: CRITICAL
     description: "Nenhum componente pode acessar dados sem passar pelo Consent Plane"
     check: |
-      every component in architecture.planes.*.components:
-        component.role != "data-access" OR
-        component.required_inputs CONTAINS "authorized-context"
+      architecture.planes.execution.components.extraction-planner.consumes CONTAINS "AuthorizedContext" AND
+      architecture.planes.dataPlane.stages[id=extraction].requirements CONTAINS { authorized-context-required: true } AND
+      architecture.pipeline.requirements.extract.authorizedContextRequired == true AND
+      architecture.pipeline.requirements.authorize.policyCheck == "mandatory"
     violation: "Componente acessa dados sem authorized-context"
-    reference: INV01
+    reference: INV-001
 
   - id: RULE-002
     name: "Consent required for execution"
     severity: CRITICAL
-    description: "Nenhum workflow pode iniciar sem consentimento válido"
+    description: "Nenhum workflow pode iniciar sem consentimento válido e versionado"
     check: |
-      every workflow in architecture.planes.execution.components.temporal.workflows:
-        workflow.input CONTAINS "consentId" AND
-        workflow.input CONTAINS "consentVersion"
+      architecture.idempotency.workflow.key CONTAINS ALL ["consentId", "consentVersion"] AND
+      architecture.planes.execution.components.workflow-engine.workflows CONTAINS "DataExtractionWorkflow" AND
+      architecture.planes.execution.components.workflow-engine.activities CONTAINS "ValidateConsentActivity"
     violation: "Workflow sem referência a consentimento"
-    reference: INV01
+    reference: INV-001
 
   # ─── Temporal Restrictions ───
 
@@ -34,30 +42,29 @@ rules:
     severity: CRITICAL
     description: "Temporal não pode acessar decisões de autorização"
     check: |
-      architecture.planes.execution.components.temporal.forbidden_responsibilities CONTAINS
-      "authorization-decision"
+      architecture.planes.execution.components.workflow-engine.forbidden CONTAINS "authorization_decision" AND
+      architecture.planes.execution.components.workflow-engine.allowed NOT CONTAINS "authorization_decision"
     violation: "Temporal tem acesso a decisões de autorização"
-    reference: INV04
+    reference: INV-004
 
   - id: RULE-004
     name: "Temporal no consent decisions"
     severity: CRITICAL
-    description: "Temporal não pode tomar decisões de consentimento"
+    description: "Temporal não pode tomar decisões de consentimento nem regulatórias"
     check: |
-      architecture.planes.execution.components.temporal.forbidden_responsibilities CONTAINS
-      "consent-decision"
+      architecture.planes.execution.components.workflow-engine.forbidden CONTAINS ALL
+        ["consent_decision", "regulatory_policy_decision"]
     violation: "Temporal toma decisões de consentimento"
-    reference: INV04
+    reference: INV-004
 
   - id: RULE-005
     name: "Temporal no direct data access"
     severity: CRITICAL
     description: "Temporal não pode acessar dados diretamente"
     check: |
-      architecture.planes.execution.components.temporal.forbidden_responsibilities CONTAINS
-      "direct-data-access"
+      architecture.planes.execution.components.workflow-engine.forbidden CONTAINS "direct_source_access"
     violation: "Temporal acessa dados diretamente"
-    reference: INV04
+    reference: INV-004
 
   # ─── Data Traceability ───
 
@@ -66,22 +73,22 @@ rules:
     severity: HIGH
     description: "Dados devem passar por lineage antes da publicação"
     check: |
-      architecture.planes.data_plane.stages.index("lineage") <
-      architecture.planes.data_plane.stages.index("publication")
+      architecture.planes.dataPlane.stages.indexOf(id=lineage) < architecture.planes.dataPlane.stages.indexOf(id=publication) AND
+      architecture.planes.dataPlane.stages[id=publication].requirements CONTAINS { lineage-created: true } AND
+      architecture.pipeline.requirements.publish.requires CONTAINS "lineage_created"
     violation: "Publicação ocorre antes do registro de linhagem"
-    reference: INV03
+    reference: INV-003
 
   - id: RULE-007
     name: "Full traceability chain"
     severity: HIGH
     description: "Cadeia de rastreabilidade deve ser completa"
     check: |
-      architecture.traceability.chain CONTAINS ALL:
-        ["consentId", "resourceId", "executionPlanId", "workflowId",
-         "activityId", "pipelineExecutionId", "sourceRecordId",
-         "canonicalRecordId", "publicationId"]
+      architecture.traceability.requiredChain CONTAINS ALL:
+        ["consentId", "consentVersion", "resourceId", "executionPlanId", "temporalWorkflowId",
+         "pipelineExecutionId", "sourceRecordId", "canonicalRecordId", "publicationId"]
     violation: "Cadeia de rastreabilidade incompleta"
-    reference: INV03
+    reference: INV-003
 
   # ─── Schema Evolution ───
 
@@ -90,11 +97,11 @@ rules:
     severity: HIGH
     description: "Novos schemas devem ser compatíveis com versões anteriores"
     check: |
-      architecture.cross_cutting CONTAINS record where:
-        record.name == "schema-registry" AND
-        record.description CONTAINS "BACKWARD"
+      architecture.planes.dataPlane.stages[id=schema-validation].requirements CONTAINS { backward-compatible: true } AND
+      infrastructure.runtime.messaging.kafka.schemaRegistry.enabled == true AND
+      infrastructure.runtime.messaging.kafka.schemaRegistry.compatibility == "BACKWARD"
     violation: "Schema registry não configurado com compatibilidade BACKWARD"
-    reference: INV07
+    reference: INV-007
 
   # ─── Pipeline Requirements ───
 
@@ -103,17 +110,21 @@ rules:
     severity: HIGH
     description: "Todo pipeline deve ter reconciliação"
     check: |
-      architecture.planes.execution.components CONTAINS "reconciliation"
+      architecture.planes.execution.components CONTAINS KEY "reconciliation" AND
+      architecture.planes.execution.components.workflow-engine.workflows CONTAINS "ReconciliationWorkflow" AND
+      infrastructure.runtime.temporal.taskQueues CONTAINS "openfinance-reconciliation"
     violation: "Pipeline sem componente de reconciliação"
-    reference: CC14
+    reference: execution-plane
 
   - id: RULE-010
     name: "Data stages complete"
     severity: MEDIUM
-    description: "Pipeline de dados deve ter todos os 7 estágios"
+    description: "Pipeline de dados deve ter os 7 estágios, na ordem canônica"
     check: |
-      architecture.planes.data_plane.stages COUNT == 7
-    violation: "Pipeline de dados com estágios faltando"
+      architecture.planes.dataPlane.stages[*].id ==
+        ["extraction", "canonicalization", "schema-validation", "data-quality",
+         "pii-classification", "lineage", "publication"]
+    violation: "Pipeline de dados com estágios faltando ou fora de ordem"
     reference: data-plane
 
   # ─── Security ───
@@ -123,27 +134,31 @@ rules:
     severity: CRITICAL
     description: "Autenticação deve usar FAPI-Brazil"
     check: |
-      architecture.planes.trust.components.fapi-auth-server.implements CONTAINS "FAPI-Brazil"
+      architecture.planes.trust.components.fapi-auth-server.responsibility CONTAINS "fapi-brazil-compliance" AND
+      architecture.security.protocols CONTAINS "fapi-brazil" AND
+      architecture.planes.distribution.channels.api.auth == "fapi-brazil"
     violation: "Servidor de autorização não implementa FAPI-Brazil"
-    reference: P05
+    reference: trust-plane
 
   - id: RULE-012
     name: "Sender-constrained tokens"
     severity: CRITICAL
-    description: "Tokens devem ser sender-constrained (DPoP ou DTLS)"
+    description: "Tokens devem ser sender-constrained (DPoP)"
     check: |
-      architecture.planes.trust.capabilities CONTAINS "DPoP" AND
-      architecture.principles CONTAINS record where record.rule == "Sender-constrained tokens"
+      architecture.security.protocols CONTAINS "dpop" AND
+      architecture.planes.trust.components.token-service.responsibility CONTAINS "sender-constrained-tokens" AND
+      architecture.planes.trust.components.fapi-auth-server.responsibility CONTAINS "dpop-validation"
     violation: "Tokens não são sender-constrained"
-    reference: P05
+    reference: trust-plane
 
   - id: RULE-013
     name: "mTLS required"
     severity: HIGH
     description: "Transporte deve usar mTLS"
     check: |
-      architecture.planes.trust.capabilities CONTAINS "mTLS" AND
-      architecture.planes.trust.components.tls-terminator.implements CONTAINS "mTLS"
+      architecture.security.protocols CONTAINS "mtls" AND
+      architecture.planes.trust.components.tls-terminator.technology == "istio-mtls" AND
+      infrastructure.runtime.serviceMesh.istio.features CONTAINS "mtls-strict"
     violation: "mTLS não configurado"
     reference: trust-plane
 
@@ -154,57 +169,59 @@ rules:
     severity: HIGH
     description: "Consentimento nunca é mutado — cria nova versão"
     check: |
-      architecture.planes.consent.components.consent-management.states CONTAINS "AUTHORIZED" AND
-      architecture.invariants CONTAINS record where record.rule == "Consent versioning"
+      architecture.invariants CONTAINS record where record.rule == "CONSENT_VERSIONING" AND
+      architecture.planes.consent.components.consent-service.responsibility CONTAINS "maintain_consent_versions"
     violation: "Consentimento pode ser mutado em vez de versionado"
-    reference: INV06
+    reference: INV-006
 
   # ─── Authorized Context ───
 
   - id: RULE-015
     name: "Authorized context immutable"
     severity: CRITICAL
-    description: "Authorized context deve ser imutável"
+    description: "Authorized context deve ser imutável e assinado"
     check: |
-      architecture.planes.consent.components.authorized-context.immutable == true AND
-      architecture.planes.consent.components.authorized-context.invariants CONTAINS
-      "Cannot be modified after creation"
+      architecture.planes.consent.components.authorized-context.type == "immutable-artifact" AND
+      architecture.planes.consent.components.authorized-context.structure.fields CONTAINS ALL
+        ["consentVersion", "signature", "dpopThumbprint"] AND
+      architecture.invariants CONTAINS record where record.rule == "IMMUTABLE_AUTHORIZED_CONTEXT"
     violation: "Authorized context não é imutável"
-    reference: INV05
+    reference: INV-005
 
   # ─── Cross-cutting ───
 
   - id: RULE-016
     name: "Observability required"
     severity: MEDIUM
-    description: "Plataforma deve ter observabilidade completa"
+    description: "Plataforma deve ter observabilidade completa (OpenTelemetry + tracing distribuído)"
     check: |
-      architecture.cross_cutting CONTAINS record where record.name == "observability" AND
-      architecture.cross_cutting CONTAINS record where record.name == "distributed-tracing"
+      architecture.observability.standard == "opentelemetry" AND
+      architecture.observability.requiredContext CONTAINS ALL ["traceId", "correlationId", "consentId"] AND
+      architecture.technology.observability.traces == "jaeger" AND
+      infrastructure.runtime.monitoring.jaeger.protocol == "OTLP"
     violation: "Observabilidade ou distributed tracing não configurados"
-    reference: CC03, CC04
+    reference: cross-cutting
 
   - id: RULE-017
     name: "Audit trail required"
     severity: HIGH
-    description: "Trail de auditoria imutável deve existir"
+    description: "Trail de auditoria de decisões de política deve existir"
     check: |
-      architecture.cross_cutting CONTAINS record where record.name == "audit" AND
-      architecture.principles CONTAINS record where record.rule == "Immutable audit trail"
-    violation: "Audit trail não configurado ou não imutável"
-    reference: CC05, P04
+      architecture.planes.consent.components.policy-engine.responsibility CONTAINS "audit_decisions" AND
+      architecture.planes.consent.components.policy-engine.api CONTAINS "GET /api/v1/policy/decisions"
+    violation: "Audit trail não configurado"
+    reference: cross-cutting
 
   - id: RULE-018
     name: "Encryption at rest and in transit"
     severity: HIGH
     description: "Dados devem ser criptografados em repouso e trânsito"
     check: |
-      architecture.cross_cutting CONTAINS record where:
-        record.name == "encryption" AND
-        record.description CONTAINS "AES-256-GCM" AND
-        record.description CONTAINS "TLS 1.3"
+      architecture.security.sensitiveData.encryptionAtRest == "AES-256-GCM" AND
+      architecture.security.sensitiveData.encryptionInTransit == "TLS-1.3" AND
+      architecture.security.sensitiveData.piiDetection == "mandatory"
     violation: "Criptografia não configurada corretamente"
-    reference: CC07
+    reference: cross-cutting
 
   # ─── Distribution ───
 
@@ -213,9 +230,9 @@ rules:
     severity: MEDIUM
     description: "Topics Kafka devem seguir padrão {domain}.{entity}.{action}.{version} (ver architecture/events.yaml#namingConvention) — sem prefixo openfinance., já que o event bus é dedicado a este módulo"
     check: |
-      architecture.planes.distribution.channels CONTAINS record where:
-        record.event-streaming.topics_pattern ==
-        "openfinance.{domain}.{entity}.{event}.{version}"
+      events.namingConvention.pattern == "{domain}.{entity}.{action}.{version}" AND
+      architecture.planes.distribution.channels.kafka.topicPattern == events.namingConvention.pattern AND
+      infrastructure.runtime.messaging.kafka.topics.pattern == events.namingConvention.pattern
     violation: "Padrão de topics Kafka não segue convenção"
     reference: distribution-plane
 
@@ -224,10 +241,11 @@ rules:
   - id: RULE-020
     name: "All domains have extractors"
     severity: MEDIUM
-    description: "Todo domínio deve ter pelo menos um extractor documentado"
+    description: "Toda capability de domínio deve declarar pipeline e extractor, e o extractor deve existir no código"
     check: |
-      every domain in architecture.domains:
-        architecture.pipeline_pattern.examples CONTAINS record where
-        record.domain == domain.name
-    violation: "Domínio sem extractor documentado no pipeline_pattern"
-    reference: pipeline_pattern
+      every capability in architecture.domains.*.capabilities:
+        capability.pipeline IS NOT EMPTY AND
+        capability.extractor IS NOT EMPTY AND
+        class com.aurix.platform.openfinance.extractor.<capability.extractor> EXISTS AND EXTENDS BaseExtractor
+    violation: "Domínio sem extractor implementado"
+    reference: domains
