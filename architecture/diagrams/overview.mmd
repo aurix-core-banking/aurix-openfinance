@@ -1,55 +1,59 @@
 graph TB
     subgraph "TRUST PLANE"
-        FAPI[FAPI Auth Server]
-        TLS[TLS/mTLS]
-        TOKEN[Token Service]
+        FAPI["FAPI-Brazil / mTLS / DPoP Filter"]
+        ECDSA["ECDSA ES256 Signing Service"]
+        AES["AES-256-GCM Encryption at Rest"]
+        RECEIPT["Consent Receipt Service"]
     end
 
     subgraph "CONSENT PLANE"
-        CM[Consent Management]
-        RD[Resource Discovery]
-        PE[Policy Engine]
-        AC[Authorized Context]
+        CM["Consent Management"]
+        RD["Resource Discovery (Graph)"]
+        PE["Policy Engine (INV-001..006)"]
+        AC["Authorized Context (Immutable)"]
     end
 
     subgraph "EXECUTION PLANE"
-        EP[Extraction Planner]
-        PLAN[Execution Plan DAG]
-        TEMP[Temporal Engine]
-        RECON[Reconciliation]
+        EP["Extraction Planner (DAG)"]
+        TEMP["Temporal Workflows (Extraction / Monitoring / Reconciliation)"]
+        RECON["Reconciliation & Repair Service"]
     end
 
     subgraph "DATA PLANE"
-        EXTRACT[Extraction]
-        CANON[Canonicalization]
-        SCHEMA[Schema Validation]
-        DQ[Data Quality]
-        PII[PII Classification]
-        LINEAGE[Lineage]
-        PUB[Publication]
+        EXTRACT["7 Core Extractors & Source Adapters"]
+        CANON["Canonicalization (12 Models)"]
+        SCHEMA["Schema Validation & Registry (INV-007)"]
+        DQ["Data Quality Rules"]
+        PII["PII Classification & Masking"]
+        LINEAGE["Lineage Tracking (INV-003)"]
+        PUB["Publication (data.published.v1)"]
     end
 
     subgraph "DISTRIBUTION PLANE"
-        KAFKA[Kafka Events]
-        API[REST API]
-        DP[Data Products]
+        KAFKA["Kafka Event Bus"]
+        DP["Data Products Service"]
+        SUB["Subscription & HMAC-SHA256 Webhooks"]
     end
 
-    subgraph "SOURCE SYSTEMS"
-        CORE[Core Banking]
-        CARD[Card System]
-        CREDIT[Credit Module]
+    subgraph "SOURCE ADAPTERS (AURIX CORE)"
+        ACC_SRC["Account / Balance / Transaction"]
+        CARD_SRC["Credit Card / Bills / Card Tx"]
+        PIX_SRC["PIX Keys & Transactions"]
+        LOAN_SRC["Loans & Installments"]
+        INV_SRC["Investments"]
+        INS_SRC["Insurance Policies"]
+        CUST_SRC["Customer Registration (PF/PJ)"]
     end
 
-    TLS --> FAPI
-    FAPI --> TOKEN
-    TOKEN --> CM
+    FAPI --> CM
+    CM --> RECEIPT
+    RECEIPT --> ECDSA
+    CM --> AES
     CM --> RD
     RD --> PE
     PE --> AC
     AC --> EP
-    EP --> PLAN
-    PLAN --> TEMP
+    EP --> TEMP
     TEMP --> RECON
     TEMP --> EXTRACT
     EXTRACT --> CANON
@@ -59,8 +63,12 @@ graph TB
     PII --> LINEAGE
     LINEAGE --> PUB
     PUB --> KAFKA
-    PUB --> API
     PUB --> DP
-    EXTRACT --> CORE
-    EXTRACT --> CARD
-    EXTRACT --> CREDIT
+    DP --> SUB
+    EXTRACT --> ACC_SRC
+    EXTRACT --> CARD_SRC
+    EXTRACT --> PIX_SRC
+    EXTRACT --> LOAN_SRC
+    EXTRACT --> INV_SRC
+    EXTRACT --> INS_SRC
+    EXTRACT --> CUST_SRC

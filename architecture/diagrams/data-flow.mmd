@@ -1,14 +1,12 @@
 graph LR
-    A[Raw Record] --> B[Canonicalization]
-    B --> C[Schema Validation]
-    C --> D[Data Quality]
-    D --> E[PII Classification]
-    E --> F[Lineage Registration]
-    F --> G[Publication]
-    
-    G --> H[Kafka Events]
-    G --> I[REST API]
-    G --> J[Data Products]
-    
-    style A fill:#f9f,stroke:#333
-    style G fill:#9f9,stroke:#333
+    A["Raw Record (7 Extractors)"] --> B["Canonicalization (12 Canonical Models)"]
+    B --> C["Schema Validation (INV-007 + JSON Schema)"]
+    C --> D["Data Quality (Score 0-100)"]
+    D --> E["PII Classification & Masking (CPF/CNPJ/Card/Name)"]
+    E --> F["Lineage Registration (INV-003)"]
+    F --> G["Publication (data.published.v1)"]
+
+    G --> H["Kafka Event Bus"]
+    G --> I["Data Products (Materialized Storage)"]
+    I --> J["REST API (/api/v1/products)"]
+    I --> K["Subscription Webhooks (HMAC-SHA256 Signed)"]

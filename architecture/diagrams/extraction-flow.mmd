@@ -1,18 +1,21 @@
 sequenceDiagram
-    participant Temporal
-    participant Pipeline
-    participant Extractor
-    participant Policy as Policy Enforcement
-    participant Adapter
-    participant Source
+    participant Temporal as Temporal (DataExtractionWorkflow)
+    participant Extract as ExtractDataActivity
+    participant Extractor as BaseExtractor (7 Domains)
+    participant Adapter as SourceAdapter
+    participant Transform as TransformDataActivity (PipelineOrchestrator)
+    participant Publish as PublishDataActivity
+    participant Recon as ReconciliationWorkflow
 
-    Temporal->>Pipeline: Execute extraction activity
-    Pipeline->>Extractor: extract(context, resource)
-    Extractor->>Policy: Validate authorization
-    Policy-->>Extractor: Authorized
-    Extractor->>Adapter: Fetch raw data
-    Adapter->>Source: Query source system
-    Source-->>Adapter: Raw data
-    Adapter-->>Extractor: Raw data
-    Extractor-->>Pipeline: Raw record
-    Pipeline-->>Temporal: Extraction complete
+    Temporal->>Extract: Executar nó do DAG (por nível topológico)
+    Extract->>Extractor: extract(AuthorizedContext, ResourceDescriptor)
+    Extractor->>Extractor: Validar INV-001 (consentimento ativo) e INV-002 (escopo)
+    Extractor->>Adapter: Consultar dados consentidos do domínio
+    Adapter-->>Extractor: Registros brutos
+    Extractor-->>Extract: RawData
+    Temporal->>Transform: transform(RawData) em lote/unitário
+    Transform->>Transform: Canonicalize -> Validate (INV-007) -> Quality -> PII Mask -> Lineage (INV-003)
+    Transform-->>Temporal: Registros mascarados + lineageIds
+    Temporal->>Publish: publish(maskedRecords, lineageIds)
+    Publish-->>Temporal: Publicado (data.published.v1) + publicationId vinculado à linhagem
+    Temporal->>Recon: Acionar reconciliação pós-extração (ReconcileActivity)

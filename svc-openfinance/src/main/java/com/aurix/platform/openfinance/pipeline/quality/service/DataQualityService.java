@@ -155,6 +155,14 @@ public class DataQualityService {
             rules.add(new QualityRule("PES001", "Nome completo da pessoa presente",
                     QualityRuleType.ACCURACY, QualityRuleSeverity.ERROR,
                     "fullName NOT EMPTY", "PESSOA"));
+        } else if (type == ResourceType.SALDO) {
+            rules.add(new QualityRule("SAL001", "Identificador do saldo presente",
+                    QualityRuleType.ACCURACY, QualityRuleSeverity.ERROR,
+                    "balanceId NOT EMPTY", "SALDO"));
+        } else if (type == ResourceType.PARCELA_CREDITO) {
+            rules.add(new QualityRule("PAR001", "Identificador da parcela de crédito presente",
+                    QualityRuleType.ACCURACY, QualityRuleSeverity.ERROR,
+                    "installmentId NOT EMPTY", "PARCELA_CREDITO"));
         }
 
         return rules;
@@ -274,6 +282,16 @@ public class DataQualityService {
                 avaliarCampoDominio(record.getCanonicalData(), "fullName",
                         valor -> valor != null && !valor.isBlank(),
                         rule, "Nome completo (fullName) da pessoa ausente ou vazio", issues);
+                break;
+            case "SAL001":
+                avaliarCampoDominio(record.getCanonicalData(), "balanceId",
+                        valor -> valor != null && !valor.isBlank(),
+                        rule, "Identificador do saldo (balanceId) ausente ou vazio", issues);
+                break;
+            case "PAR001":
+                avaliarCampoDominio(record.getCanonicalData(), "installmentId",
+                        valor -> valor != null && !valor.isBlank(),
+                        rule, "Identificador da parcela (installmentId) ausente ou vazio", issues);
                 break;
             default:
                 break;

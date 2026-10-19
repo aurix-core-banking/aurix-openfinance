@@ -120,6 +120,9 @@ class DataExtractionWorkflowIntegrationTest {
     private DataProductRecordRepository dataProductRecordRepository;
 
     @Autowired
+    private com.aurix.platform.openfinance.repository.TransacaoConsentidaRepository transacaoContaRepository;
+
+    @Autowired
     private com.aurix.platform.openfinance.distribution.subscription.service.SubscriptionService subscriptionService;
 
     @Autowired
@@ -133,6 +136,7 @@ class DataExtractionWorkflowIntegrationTest {
         dataProductRecordRepository.deleteAll();
         dataProductRepository.deleteAll();
         transacaoCartaoRepository.deleteAll();
+        transacaoContaRepository.deleteAll();
         faturaRepository.deleteAll();
         cartaoRepository.deleteAll();
         seguroRepository.deleteAll();
@@ -626,5 +630,132 @@ class DataExtractionWorkflowIntegrationTest {
         } finally {
             webhookServer.stop(0);
         }
+    }
+
+    @Test
+    void deveExecutarFluxoGranularDeTransacoesSaldosEParcelasEmprestimo() {
+        String consentId = "consent-subresources-17-e2e";
+
+        Consentimento consentimento = new Consentimento();
+        consentimento.setConsentId(consentId);
+        consentimento.setClientId("client-subresources-17");
+        consentimento.setUserId(101L);
+        consentimento.setStatus(Consentimento.StatusConsentimento.AUTHORISED);
+        consentimento.setPermissions("accounts,balances,transactions,loans,loan_installments");
+        consentimento.setDataCriacao(LocalDateTime.now());
+        consentimento.setDataExpiracao(LocalDateTime.now().plusDays(30));
+        consentimentoRepository.save(consentimento);
+
+        ContaConsentida conta = new ContaConsentida();
+        conta.setConsentId(consentId);
+        conta.setAccountId("acc-sub-1");
+        conta.setInstitutionCode("AURIX");
+        conta.setMoeda("BRL");
+        conta.setTipoConta(ContaConsentida.TipoConta.CONTA_DE_DEPOSITO);
+        conta.setStatusConta("ACTIVE");
+        conta.setSaldoDisponivel(new BigDecimal("4200.75"));
+        conta.setSaldoAtual(new BigDecimal("4200.75"));
+        conta.setDataAtualizacao(LocalDateTime.now());
+        contaRepository.save(conta);
+
+        com.aurix.platform.openfinance.entity.TransacaoConsentida tx =
+                new com.aurix.platform.openfinance.entity.TransacaoConsentida();
+        tx.setConsentId(consentId);
+        tx.setAccountId("acc-sub-1");
+        tx.setTransactionId("tx-sub-1");
+        tx.setTipoTransacao(com.aurix.platform.openfinance.entity.TransacaoConsentida.TipoTransacao.CREDITO);
+        tx.setValor(new BigDecimal("750.00"));
+        tx.setMoeda("BRL");
+        tx.setEstabelecimento("Aurix Pagamentos");
+        tx.setDescricao("TED Recebida");
+        tx.setDataTransacao(LocalDateTime.of(2026, 10, 18, 12, 0));
+        tx.setDataProcessamento(LocalDateTime.of(2026, 10, 18, 12, 5));
+        transacaoContaRepository.save(tx);
+
+        EmprestimoConsentido emprestimo = new EmprestimoConsentido();
+        emprestimo.setConsentId(consentId);
+        emprestimo.setEmprestimoId("loan-sub-1");
+        emprestimo.setClienteId("12345678901");
+        emprestimo.setTipoEmprestimo("CONSIGNADO");
+        emprestimo.setValorContratado(new BigDecimal("18000.00"));
+        emprestimo.setValorSaldoDevedor(new BigDecimal("15000.00"));
+        emprestimo.setTaxaJuros(new BigDecimal("1.45"));
+        emprestimo.setPrazoMeses(24);
+        emprestimo.setParcelasPagas(4);
+        emprestimo.setParcelasRestantes(20);
+        emprestimo.setValorParcela(new BigDecimal("850.00"));
+        emprestimo.setDataContratacao(LocalDate.of(2026, 6, 10));
+        emprestimo.setDataVencimentoPrimeiraParcela(LocalDate.of(2026, 11, 10));
+        emprestimo.setStatusEmprestimo("ATIVO");
+        emprestimo.setDataAtualizacao(LocalDateTime.now());
+        emprestimoRepository.save(emprestimo);
+
+        AuthorizedContext context = new AuthorizedContext(
+                "ctx-sub-" + UUID.randomUUID(), "subject-sub", consentId, 1,
+                "accounts,balances,transactions,loans,loan_installments",
+                "[\"accounts:READ\",\"balances:READ\",\"transactions:READ\",\"loans:READ\",\"loan_installments:READ\"]",
+                "[\"contas\",\"saldos\",\"transacoes\",\"emprestimos\",\"parcelas_emprestimo\"]",
+                LocalDateTime.now().plusHours(1), "ES256", "thumb-sub", "sig-sub");
+        authorizedContextRepository.save(context);
+
+        DataProduct prodTransacoes = dataProductService.create(new DataProductRequest(
+                "Transações Conta Open Finance", "Produto de transações em conta", "transacoes",
+                "TRANSACAO", "json", "{}", "/api/v1/data-products/transacoes"));
+        DataProduct prodSaldos = dataProductService.create(new DataProductRequest(
+                "Saldos Open Finance", "Produto de saldos bancários", "saldos",
+                "SALDO", "json", "{}", "/api/v1/data-products/saldos"));
+        DataProduct prodParcelas = dataProductService.create(new DataProductRequest(
+                "Parcelas Empréstimo Open Finance", "Produto de parcelas de crédito", "parcelas_emprestimo",
+                "PARCELA_CREDITO", "json", "{}", "/api/v1/data-products/parcelas-emprestimo"));
+
+        ExecutionPlanRequest.SerializableNode nodeTransacoes = new ExecutionPlanRequest.SerializableNode();
+        nodeTransacoes.setNodeId("node-transacoes");
+        nodeTransacoes.setCapability("extract-transacoes");
+        nodeTransacoes.setResource("transacoes");
+        nodeTransacoes.setDependencies(List.of());
+        nodeTransacoes.setIdempotencyKey(UUID.randomUUID().toString());
+        nodeTransacoes.setTimeoutSeconds(30);
+
+        ExecutionPlanRequest.SerializableNode nodeSaldos = new ExecutionPlanRequest.SerializableNode();
+        nodeSaldos.setNodeId("node-saldos");
+        nodeSaldos.setCapability("extract-saldos");
+        nodeSaldos.setResource("saldos");
+        nodeSaldos.setDependencies(List.of());
+        nodeSaldos.setIdempotencyKey(UUID.randomUUID().toString());
+        nodeSaldos.setTimeoutSeconds(30);
+
+        ExecutionPlanRequest.SerializableNode nodeParcelas = new ExecutionPlanRequest.SerializableNode();
+        nodeParcelas.setNodeId("node-parcelas_emprestimo");
+        nodeParcelas.setCapability("extract-parcelas_emprestimo");
+        nodeParcelas.setResource("parcelas_emprestimo");
+        nodeParcelas.setDependencies(List.of());
+        nodeParcelas.setIdempotencyKey(UUID.randomUUID().toString());
+        nodeParcelas.setTimeoutSeconds(30);
+
+        ExecutionPlanRequest plano = new ExecutionPlanRequest();
+        plano.setPlanId("plan-sub-" + UUID.randomUUID());
+        plano.setConsentId(consentId);
+        plano.setConsentVersion(1);
+        plano.setParticipantId("participant-sub");
+        plano.setNodes(List.of(nodeTransacoes, nodeSaldos, nodeParcelas));
+
+        WorkflowClient client = testEnv.getWorkflowClient();
+        DataExtractionWorkflow workflow = client.newWorkflowStub(DataExtractionWorkflow.class,
+                WorkflowOptions.newBuilder().setTaskQueue(TASK_QUEUE).build());
+
+        ExtractionResult result = workflow.execute(plano);
+
+        assertTrue(result.isSuccess(), "Workflow granular de transacoes, saldos e parcelas deveria ter sucesso: " + result.getErrors());
+        assertEquals(3, result.getNodesProcessed());
+        assertEquals(0, result.getNodesFailed());
+
+        assertEquals(1, dataProductService.serve(prodTransacoes.getProductId(), null).getTotalCount());
+        assertTrue(dataProductService.serve(prodTransacoes.getProductId(), null).getRecords().get(0).toString().contains("tx-sub-1"));
+
+        assertEquals(1, dataProductService.serve(prodSaldos.getProductId(), null).getTotalCount());
+        assertTrue(dataProductService.serve(prodSaldos.getProductId(), null).getRecords().get(0).toString().contains("bal-acc-sub-1"));
+
+        assertEquals(1, dataProductService.serve(prodParcelas.getProductId(), null).getTotalCount());
+        assertTrue(dataProductService.serve(prodParcelas.getProductId(), null).getRecords().get(0).toString().contains("inst-loan-sub-1-1"));
     }
 }

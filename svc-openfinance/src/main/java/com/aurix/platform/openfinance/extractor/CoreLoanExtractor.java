@@ -28,6 +28,26 @@ public class CoreLoanExtractor extends BaseExtractor {
     protected RawData doExtract(AuthorizedContext context, ResourceDescriptor resource) {
         List<LoanSourceAdapter.Loan> emprestimos = sourceAdapter.findLoans(context.getConsentId());
 
+        if (resource.getResourceType() == ResourceType.LOAN_INSTALLMENTS) {
+            List<Map<String, Object>> parcelas = emprestimos.stream()
+                    .map(l -> Map.<String, Object>of(
+                            "installmentId", "inst-" + l.loanId() + "-1",
+                            "loanId", l.loanId(),
+                            "number", (l.installmentsPaid() != null ? l.installmentsPaid() : 0) + 1,
+                            "amount", l.installmentAmount() != null ? l.installmentAmount() : java.math.BigDecimal.ZERO,
+                            "dueDate", l.firstInstallmentDueDate() != null ? l.firstInstallmentDueDate() : java.time.LocalDate.now(),
+                            "status", "PENDENTE"
+                    ))
+                    .toList();
+            return RawData.builder()
+                    .resourceType(resource.getResourceType())
+                    .contextId(context.getContextId())
+                    .payload(Map.of("parcelas_emprestimo", parcelas))
+                    .recordCount(parcelas.size())
+                    .extractedAt(java.time.LocalDateTime.now())
+                    .build();
+        }
+
         return RawData.builder()
                 .resourceType(resource.getResourceType())
                 .contextId(context.getContextId())

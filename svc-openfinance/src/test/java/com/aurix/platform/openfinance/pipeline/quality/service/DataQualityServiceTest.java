@@ -118,6 +118,20 @@ class DataQualityServiceTest {
                 ResourceType.PESSOA);
         assertTrue(resPessoa.getIssues().stream().anyMatch(i -> "PES001".equals(i.getRuleId())),
                 "Deveria apontar violação em PES001 quando fullName estiver vazio");
+
+        String jsonSaldoInvalido = "{\"balanceId\":\"\",\"accountId\":\"acc-1\"}";
+        QualityResult resSaldo = service.checkQuality(
+                criarRecord(ResourceType.SALDO, jsonSaldoInvalido, sha256(jsonSaldoInvalido)),
+                ResourceType.SALDO);
+        assertTrue(resSaldo.getIssues().stream().anyMatch(i -> "SAL001".equals(i.getRuleId())),
+                "Deveria apontar violação em SAL001 quando balanceId estiver vazio");
+
+        String jsonParcelaInvalida = "{\"installmentId\":\"\",\"loanId\":\"loan-1\"}";
+        QualityResult resParcela = service.checkQuality(
+                criarRecord(ResourceType.PARCELA_CREDITO, jsonParcelaInvalida, sha256(jsonParcelaInvalida)),
+                ResourceType.PARCELA_CREDITO);
+        assertTrue(resParcela.getIssues().stream().anyMatch(i -> "PAR001".equals(i.getRuleId())),
+                "Deveria apontar violação em PAR001 quando installmentId estiver vazio");
     }
 
     private CanonicalRecord criarRecord(final ResourceType type, final String json, final String checksum) {

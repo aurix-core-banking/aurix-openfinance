@@ -341,6 +341,10 @@ public class SchemaValidationService {
                         "premiumAmount", "status");
             case PESSOA:
                 return List.of("customerId", "documentNumber", "personType", "fullName", "status");
+            case SALDO:
+                return List.of("balanceId", "accountId", "available", "blocked", "updateTimestamp");
+            case PARCELA_CREDITO:
+                return List.of("installmentId", "loanId", "number", "amount", "dueDate", "status");
             default:
                 return List.of();
         }

@@ -32,17 +32,19 @@ public class TransformDataActivityImpl implements TransformDataActivity {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private static final List<String> CHAVES_ENVELOPE = List.of(
-            "contas", "transacoes", "cartoes", "faturas", "transacoes_cartao",
-            "emprestimos", "transacoes_pix", "investimentos", "seguros", "pessoas",
+            "contas", "saldos", "transacoes", "cartoes", "faturas", "transacoes_cartao",
+            "emprestimos", "parcelas_emprestimo", "transacoes_pix", "investimentos", "seguros", "pessoas",
             "records", "items", "data");
 
     private static final Map<String, ResourceType> RESOURCE_TYPE_BY_DOMAIN = Map.ofEntries(
             Map.entry("contas", ResourceType.CONTA),
+            Map.entry("saldos", ResourceType.SALDO),
             Map.entry("transacoes", ResourceType.TRANSACAO),
             Map.entry("cartoes", ResourceType.CARTAO),
             Map.entry("faturas", ResourceType.FATURA_CARTAO),
             Map.entry("transacoes_cartao", ResourceType.TRANSACAO_CARTAO),
             Map.entry("emprestimos", ResourceType.CREDITO),
+            Map.entry("parcelas_emprestimo", ResourceType.PARCELA_CREDITO),
             Map.entry("pix", ResourceType.PIX),
             Map.entry("investimentos", ResourceType.INVESTIMENTO),
             Map.entry("seguros", ResourceType.SEGURO),
