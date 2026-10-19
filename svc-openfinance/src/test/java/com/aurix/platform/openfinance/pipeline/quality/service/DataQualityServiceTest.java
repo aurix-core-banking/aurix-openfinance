@@ -90,6 +90,34 @@ class DataQualityServiceTest {
                 ResourceType.INVESTIMENTO);
         assertTrue(resInv.getIssues().stream().anyMatch(i -> "INV001".equals(i.getRuleId())),
                 "Deveria apontar violação em INV001 para tipo de investimento inválido");
+
+        String jsonFaturaInvalida = "{\"billId\":\"\",\"cardId\":\"card-1\"}";
+        QualityResult resFatura = service.checkQuality(
+                criarRecord(ResourceType.FATURA_CARTAO, jsonFaturaInvalida, sha256(jsonFaturaInvalida)),
+                ResourceType.FATURA_CARTAO);
+        assertTrue(resFatura.getIssues().stream().anyMatch(i -> "FAT001".equals(i.getRuleId())),
+                "Deveria apontar violação em FAT001 quando billId estiver vazio");
+
+        String jsonTxCartaoInvalida = "{\"transactionId\":\"\",\"cardId\":\"card-1\"}";
+        QualityResult resTxCartao = service.checkQuality(
+                criarRecord(ResourceType.TRANSACAO_CARTAO, jsonTxCartaoInvalida, sha256(jsonTxCartaoInvalida)),
+                ResourceType.TRANSACAO_CARTAO);
+        assertTrue(resTxCartao.getIssues().stream().anyMatch(i -> "TXC001".equals(i.getRuleId())),
+                "Deveria apontar violação em TXC001 quando transactionId estiver vazio");
+
+        String jsonSeguroInvalido = "{\"policyId\":\"pol-1\",\"type\":\"ESPACIAL_INVALIDO\"}";
+        QualityResult resSeguro = service.checkQuality(
+                criarRecord(ResourceType.SEGURO, jsonSeguroInvalido, sha256(jsonSeguroInvalido)),
+                ResourceType.SEGURO);
+        assertTrue(resSeguro.getIssues().stream().anyMatch(i -> "SEG001".equals(i.getRuleId())),
+                "Deveria apontar violação em SEG001 para tipo de seguro inválido");
+
+        String jsonPessoaInvalida = "{\"customerId\":\"cust-1\",\"fullName\":\"\"}";
+        QualityResult resPessoa = service.checkQuality(
+                criarRecord(ResourceType.PESSOA, jsonPessoaInvalida, sha256(jsonPessoaInvalida)),
+                ResourceType.PESSOA);
+        assertTrue(resPessoa.getIssues().stream().anyMatch(i -> "PES001".equals(i.getRuleId())),
+                "Deveria apontar violação em PES001 quando fullName estiver vazio");
     }
 
     private CanonicalRecord criarRecord(final ResourceType type, final String json, final String checksum) {

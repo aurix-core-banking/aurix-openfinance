@@ -210,4 +210,84 @@ class CanonicalizationServiceTest {
         assertEquals("10000.00", resultado.get("appliedAmount").asText());
         assertEquals("ATIVO", resultado.get("status").asText());
     }
+
+    @Test
+    void canonicalizeFaturaCartaoMapeiaCamposEAtribuiStatusPadrao() throws Exception {
+        String envelopeFatura = """
+                {"faturas":[{"billId":"bill-1","cardId":"card-1","dueDate":"2026-11-10",
+                             "totalAmount":"1250,00","minimumAmount":"125,00","paidAmount":"0,00"}]}
+                """;
+        RawRecord raw = RawRecord.criar("rec-bill-1", "AURIX_CORE", "node-faturas",
+                ResourceType.FATURA_CARTAO, envelopeFatura, LocalDateTime.now(), "1.0");
+
+        CanonicalRecord record = service.canonicalize(raw, ResourceType.FATURA_CARTAO);
+        JsonNode resultado = mapper.readTree(record.getCanonicalData());
+
+        assertEquals("bill-1", resultado.get("billId").asText());
+        assertEquals("card-1", resultado.get("cardId").asText());
+        assertEquals("2026-11-10", resultado.get("dueDate").asText());
+        assertEquals("1250.00", resultado.get("totalAmount").asText());
+        assertEquals("0.00", resultado.get("paidAmount").asText());
+        assertEquals("ABERTA", resultado.get("status").asText());
+    }
+
+    @Test
+    void canonicalizeTransacaoCartaoMapeiaCamposDeCompra() throws Exception {
+        String envelopeTxCartao = """
+                {"transacoes_cartao":[{"transactionId":"txc-1","cardId":"card-1","amount":"89,90",
+                                       "currency":"BRL","merchant":"Livraria Aurix",
+                                       "transactionType":"COMPRA_A_VISTA","transactionDate":"2026-10-15T14:20:00"}]}
+                """;
+        RawRecord raw = RawRecord.criar("rec-txc-1", "AURIX_CORE", "node-transacoes_cartao",
+                ResourceType.TRANSACAO_CARTAO, envelopeTxCartao, LocalDateTime.now(), "1.0");
+
+        CanonicalRecord record = service.canonicalize(raw, ResourceType.TRANSACAO_CARTAO);
+        JsonNode resultado = mapper.readTree(record.getCanonicalData());
+
+        assertEquals("txc-1", resultado.get("transactionId").asText());
+        assertEquals("card-1", resultado.get("cardId").asText());
+        assertEquals("89.90", resultado.get("amount").asText());
+        assertEquals("Livraria Aurix", resultado.get("merchantName").asText());
+        assertEquals("2026-10-15T14:20:00", resultado.get("timestamp").asText());
+    }
+
+    @Test
+    void canonicalizeSeguroMapeiaCamposEConverteEnums() throws Exception {
+        String envelopeSeguro = """
+                {"seguros":[{"policyId":"pol-1","customerId":"12345678909","type":"VIDA",
+                             "insurerName":"Aurix Seguros S.A.","insuredAmount":"500000,00",
+                             "premiumAmount":"1200,00","status":"VIGENTE"}]}
+                """;
+        RawRecord raw = RawRecord.criar("rec-seg-1", "AURIX_CORE", "node-seguros",
+                ResourceType.SEGURO, envelopeSeguro, LocalDateTime.now(), "1.0");
+
+        CanonicalRecord record = service.canonicalize(raw, ResourceType.SEGURO);
+        JsonNode resultado = mapper.readTree(record.getCanonicalData());
+
+        assertEquals("pol-1", resultado.get("policyId").asText());
+        assertEquals("12345678909", resultado.get("documentNumber").asText());
+        assertEquals("VIDA", resultado.get("type").asText());
+        assertEquals("500000.00", resultado.get("insuredAmount").asText());
+        assertEquals("1200.00", resultado.get("premiumAmount").asText());
+        assertEquals("ATIVA", resultado.get("status").asText());
+    }
+
+    @Test
+    void canonicalizePessoaMapeiaCamposCadastraisEConverteEnums() throws Exception {
+        String envelopePessoa = """
+                {"pessoas":[{"customerId":"cust-1","documentNumber":"12345678909","personType":"FISICA",
+                             "fullName":"Maria Aurix Silva","email":"maria@aurix.com","phone":"11999990000"}]}
+                """;
+        RawRecord raw = RawRecord.criar("rec-pes-1", "AURIX_CORE", "node-pessoas",
+                ResourceType.PESSOA, envelopePessoa, LocalDateTime.now(), "1.0");
+
+        CanonicalRecord record = service.canonicalize(raw, ResourceType.PESSOA);
+        JsonNode resultado = mapper.readTree(record.getCanonicalData());
+
+        assertEquals("cust-1", resultado.get("customerId").asText());
+        assertEquals("12345678909", resultado.get("documentNumber").asText());
+        assertEquals("PF", resultado.get("personType").asText());
+        assertEquals("Maria Aurix Silva", resultado.get("fullName").asText());
+        assertEquals("ATIVO", resultado.get("status").asText());
+    }
 }

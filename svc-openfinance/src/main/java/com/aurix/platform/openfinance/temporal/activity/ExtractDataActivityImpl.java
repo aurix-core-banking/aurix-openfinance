@@ -38,7 +38,9 @@ public class ExtractDataActivityImpl implements ExtractDataActivity {
             Map.entry("transacoes_cartao", ResourceType.CARD_TRANSACTIONS),
             Map.entry("emprestimos", ResourceType.LOANS),
             Map.entry("pix", ResourceType.PIX_TRANSACTIONS),
-            Map.entry("investimentos", ResourceType.INVESTMENTS)
+            Map.entry("investimentos", ResourceType.INVESTMENTS),
+            Map.entry("seguros", ResourceType.INSURANCE),
+            Map.entry("pessoas", ResourceType.CUSTOMERS)
     );
 
     private final AuthorizedContextRepository authorizedContextRepository;

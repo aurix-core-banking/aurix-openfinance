@@ -33,7 +33,27 @@ public enum ResourceType {
     /**
      * Investimento (aplicação financeira).
      */
-    INVESTIMENTO("Investimento");
+    INVESTIMENTO("Investimento"),
+
+    /**
+     * Fatura de cartão de crédito.
+     */
+    FATURA_CARTAO("Fatura de Cartão"),
+
+    /**
+     * Transação de cartão de crédito.
+     */
+    TRANSACAO_CARTAO("Transação de Cartão"),
+
+    /**
+     * Apólice de seguro.
+     */
+    SEGURO("Seguro"),
+
+    /**
+     * Dados cadastrais de pessoa física ou jurídica.
+     */
+    PESSOA("Pessoa");
 
     /**
      * Descrição do tipo.

@@ -104,7 +104,7 @@ flows:
             │
         ┌───┴───┐
         ▼       ▼
-      Bills   Transactions
+        Bills   Transactions
         │       │
         └───┬───┘
             ▼

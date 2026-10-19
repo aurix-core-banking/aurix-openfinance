@@ -26,6 +26,28 @@ public class CoreCardExtractor extends BaseExtractor {
 
     @Override
     protected RawData doExtract(AuthorizedContext context, ResourceDescriptor resource) {
+        if (resource.getResourceType() == ResourceType.CARD_BILLS) {
+            List<CardSourceAdapter.Bill> faturas = sourceAdapter.findBills(context.getConsentId());
+            return RawData.builder()
+                    .resourceType(resource.getResourceType())
+                    .contextId(context.getContextId())
+                    .payload(Map.of("faturas", faturas))
+                    .recordCount(faturas.size())
+                    .extractedAt(java.time.LocalDateTime.now())
+                    .build();
+        }
+        if (resource.getResourceType() == ResourceType.CARD_TRANSACTIONS) {
+            List<CardSourceAdapter.CardTransaction> transacoes =
+                    sourceAdapter.findCardTransactions(context.getConsentId());
+            return RawData.builder()
+                    .resourceType(resource.getResourceType())
+                    .contextId(context.getContextId())
+                    .payload(Map.of("transacoes_cartao", transacoes))
+                    .recordCount(transacoes.size())
+                    .extractedAt(java.time.LocalDateTime.now())
+                    .build();
+        }
+
         List<CardSourceAdapter.Card> cartoes = sourceAdapter.findCards(context.getConsentId());
         List<CardSourceAdapter.Bill> faturas = sourceAdapter.findBills(context.getConsentId());
         List<CardSourceAdapter.CardTransaction> transacoes =

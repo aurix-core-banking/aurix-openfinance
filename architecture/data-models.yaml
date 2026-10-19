@@ -270,6 +270,67 @@ canonicalModels:
         values: [ATIVO, RESGATADO, VENCIDO]
         required: true
 
+  insurance:
+    name: CanonicalInsurance
+    fields:
+      - name: policyId
+        type: string
+        required: true
+      - name: documentNumber
+        type: string
+        required: true
+        pii: true
+        protection: hash
+      - name: type
+        type: enum
+        values: [VIDA, AUTO, RESIDENCIAL, PRESTAMISTA]
+        required: true
+      - name: insuredAmount
+        type: decimal
+        required: true
+      - name: premiumAmount
+        type: decimal
+        required: true
+      - name: status
+        type: enum
+        values: [ATIVA, CANCELADA, VENCIDA]
+        required: true
+
+  customer:
+    name: CanonicalCustomer
+    fields:
+      - name: customerId
+        type: string
+        required: true
+      - name: documentNumber
+        type: string
+        required: true
+        pii: true
+        protection: hash
+      - name: personType
+        type: enum
+        values: [PF, PJ]
+        required: true
+      - name: fullName
+        type: string
+        required: true
+        pii: true
+        protection: mask
+      - name: email
+        type: string
+        required: false
+        pii: true
+        protection: hash
+      - name: phone
+        type: string
+        required: false
+        pii: true
+        protection: hash
+      - name: status
+        type: enum
+        values: [ATIVO, INATIVO]
+        required: true
+
 piiTreatment:
   detection:
     methods:

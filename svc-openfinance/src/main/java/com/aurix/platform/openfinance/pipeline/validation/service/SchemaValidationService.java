@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Serviço de validação de schema do pipeline Open Finance.
@@ -174,6 +175,12 @@ public class SchemaValidationService {
                 errors.add(path + ": valor '" + instance.asText() + "' fora do enum permitido");
             }
         }
+        if (instance.isTextual() && schema.has("pattern")) {
+            String regex = schema.get("pattern").asText();
+            if (!Pattern.compile(regex).matcher(instance.asText()).find()) {
+                errors.add(path + ": valor '" + instance.asText() + "' não corresponde ao padrão '" + regex + "'");
+            }
+        }
         if (instance.isNumber() && schema.has("minimum")) {
             double min = schema.get("minimum").asDouble();
             if (instance.asDouble() < min) {
@@ -201,15 +208,21 @@ public class SchemaValidationService {
                 }
             }
             JsonNode props = schema.get("properties");
-            if (schema.has("additionalProperties")
-                    && schema.get("additionalProperties").isBoolean()
-                    && !schema.get("additionalProperties").asBoolean()
-                    && props != null && props.isObject()) {
-                instance.fieldNames().forEachRemaining(fieldName -> {
-                    if (!props.has(fieldName)) {
-                        errors.add(path + ": propriedade adicional não permitida '" + fieldName + "'");
-                    }
-                });
+            if (schema.has("additionalProperties")) {
+                JsonNode addProps = schema.get("additionalProperties");
+                if (addProps.isBoolean() && !addProps.asBoolean() && props != null && props.isObject()) {
+                    instance.fieldNames().forEachRemaining(fieldName -> {
+                        if (!props.has(fieldName)) {
+                            errors.add(path + ": propriedade adicional não permitida '" + fieldName + "'");
+                        }
+                    });
+                } else if (addProps.isObject()) {
+                    instance.fieldNames().forEachRemaining(fieldName -> {
+                        if (props == null || !props.has(fieldName)) {
+                            validarNoContraJsonSchema(path + "." + fieldName, addProps, instance.get(fieldName), errors);
+                        }
+                    });
+                }
             }
             if (props != null && props.isObject()) {
                 props.fieldNames().forEachRemaining(propName -> {
@@ -318,6 +331,16 @@ public class SchemaValidationService {
             case INVESTIMENTO:
                 return List.of("investmentId", "documentNumber", "type", "currentValue",
                         "appliedAmount", "status");
+            case FATURA_CARTAO:
+                return List.of("billId", "cardId", "dueDate", "totalAmount",
+                        "paidAmount", "status");
+            case TRANSACAO_CARTAO:
+                return List.of("transactionId", "cardId", "amount", "timestamp");
+            case SEGURO:
+                return List.of("policyId", "documentNumber", "type", "insuredAmount",
+                        "premiumAmount", "status");
+            case PESSOA:
+                return List.of("customerId", "documentNumber", "personType", "fullName", "status");
             default:
                 return List.of();
         }

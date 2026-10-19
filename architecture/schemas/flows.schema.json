@@ -12,7 +12,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "description", "trigger", "steps"],
+        "required": ["id", "description", "trigger"],
         "properties": {
           "id": { "type": "string" },
           "description": { "type": "string" },

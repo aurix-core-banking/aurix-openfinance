@@ -39,6 +39,8 @@ public class DataQualityService {
             Set.of("CREDITO", "DEBITO", "CREDIT", "DEBIT");
     private static final Set<String> TIPOS_INVESTIMENTO_VALIDOS =
             Set.of("RENDA_FIXA", "RENDA_VARIAVEL", "TESOURO_DIRETO", "FUNDO", "CDB", "LCI", "LCA");
+    private static final Set<String> TIPOS_SEGURO_VALIDOS =
+            Set.of("VIDA", "AUTO", "RESIDENCIAL", "PRESTAMISTA");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -137,6 +139,22 @@ public class DataQualityService {
                     QualityRuleType.ACCURACY, QualityRuleSeverity.ERROR,
                     "type IN (RENDA_FIXA, RENDA_VARIAVEL, TESOURO_DIRETO, FUNDO, CDB, LCI, LCA)",
                     "INVESTIMENTO"));
+        } else if (type == ResourceType.FATURA_CARTAO) {
+            rules.add(new QualityRule("FAT001", "Identificador da fatura presente",
+                    QualityRuleType.ACCURACY, QualityRuleSeverity.ERROR,
+                    "billId NOT EMPTY", "FATURA_CARTAO"));
+        } else if (type == ResourceType.TRANSACAO_CARTAO) {
+            rules.add(new QualityRule("TXC001", "Identificador da transação de cartão presente",
+                    QualityRuleType.ACCURACY, QualityRuleSeverity.ERROR,
+                    "transactionId NOT EMPTY", "TRANSACAO_CARTAO"));
+        } else if (type == ResourceType.SEGURO) {
+            rules.add(new QualityRule("SEG001", "Tipo de seguro válido",
+                    QualityRuleType.ACCURACY, QualityRuleSeverity.ERROR,
+                    "type IN (VIDA, AUTO, RESIDENCIAL, PRESTAMISTA)", "SEGURO"));
+        } else if (type == ResourceType.PESSOA) {
+            rules.add(new QualityRule("PES001", "Nome completo da pessoa presente",
+                    QualityRuleType.ACCURACY, QualityRuleSeverity.ERROR,
+                    "fullName NOT EMPTY", "PESSOA"));
         }
 
         return rules;
@@ -236,6 +254,26 @@ public class DataQualityService {
                 avaliarCampoDominio(record.getCanonicalData(), "type",
                         valor -> valor != null && TIPOS_INVESTIMENTO_VALIDOS.contains(valor.toUpperCase()),
                         rule, "Tipo de investimento inválido no registro canônico", issues);
+                break;
+            case "FAT001":
+                avaliarCampoDominio(record.getCanonicalData(), "billId",
+                        valor -> valor != null && !valor.isBlank(),
+                        rule, "Identificador da fatura (billId) ausente ou vazio", issues);
+                break;
+            case "TXC001":
+                avaliarCampoDominio(record.getCanonicalData(), "transactionId",
+                        valor -> valor != null && !valor.isBlank(),
+                        rule, "Identificador da transação de cartão (transactionId) ausente ou vazio", issues);
+                break;
+            case "SEG001":
+                avaliarCampoDominio(record.getCanonicalData(), "type",
+                        valor -> valor != null && TIPOS_SEGURO_VALIDOS.contains(valor.toUpperCase()),
+                        rule, "Tipo de seguro inválido no registro canônico", issues);
+                break;
+            case "PES001":
+                avaliarCampoDominio(record.getCanonicalData(), "fullName",
+                        valor -> valor != null && !valor.isBlank(),
+                        rule, "Nome completo (fullName) da pessoa ausente ou vazio", issues);
                 break;
             default:
                 break;

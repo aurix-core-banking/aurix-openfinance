@@ -402,6 +402,20 @@ domains:
         extractor: CoreInvestmentExtractor
         source: PostgreSQL
 
+  insurance:
+    capabilities:
+      policies:
+        pipeline: InsurancePolicyPipeline
+        extractor: CoreInsuranceExtractor
+        source: PostgreSQL
+
+  customers:
+    capabilities:
+      identifications:
+        pipeline: CustomerIdentificationPipeline
+        extractor: CoreCustomerExtractor
+        source: PostgreSQL
+
 pipeline:
   requiredStages:
     - authorize
