@@ -22,8 +22,8 @@ jobs:
           java-version: "25"
           cache: maven
 
-      - name: Run Architecture Invariants (INV-001 to INV-006) & YAML Governance
-        run: mvn -B test -Dtest=ArchitectureTest,ArchitectureYamlSchemaTest,SchemaCompatibilityTest,ConsentServiceContractTest
+      - name: Run Architecture Invariants (INV-001 to INV-007), Rules Compliance & YAML Governance
+        run: mvn -B test -Dtest=ArchitectureTest,ArchitectureYamlSchemaTest,ArchitectureRulesComplianceTest,SchemaCompatibilityTest,ConsentServiceContractTest
 
       - name: Run Full Maven Test Suite (Unit, Temporal Workflows & E2E)
         run: mvn -B test
