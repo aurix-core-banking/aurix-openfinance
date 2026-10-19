@@ -342,7 +342,7 @@ planes:
     channels:
       kafka:
         enabled: true
-        topicPattern: "{domain}.{event}.{version}"
+        topicPattern: "{domain}.{entity}.{action}.{version}"
       api:
         enabled: true
         auth: fapi-brazil
