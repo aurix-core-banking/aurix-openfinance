@@ -56,6 +56,25 @@ public class DataPublishedEventListener {
     }
 
     /**
+     * Propaga eventos de encerramento de consentimento ({@code consent.revoked.v1} e
+     * {@code consent.expired.v1}) para todos os assinantes de webhooks que escutam esses eventos.
+     */
+    @EventListener
+    public void onConsentTerminated(com.aurix.platform.openfinance.event.ConsentTerminatedEvent event) {
+        if (event == null || event.eventType() == null) {
+            return;
+        }
+        Object payload = event.envelope() != null
+                ? event.envelope()
+                : Map.of("eventType", event.eventType(),
+                         "consentId", String.valueOf(event.consentId()),
+                         "reason", String.valueOf(event.reason()));
+        subscriptionService.notifyAllActiveSubscribers(event.eventType(), payload);
+        log.info("Notificação de encerramento de consentimento enviada aos assinantes: evento={}, consentId={}",
+                event.eventType(), event.consentId());
+    }
+
+    /**
      * Processa um evento de publicação. O envelope pode chegar como Map (Kafka JSON
      * deserializado) contendo os metadados obrigatórios e o recurso publicado.
      *
@@ -85,7 +104,7 @@ public class DataPublishedEventListener {
         for (DataProduct produto : produtos) {
             if (dataProductService != null && !canonicalData.isBlank()) {
                 List<CanonicalRecord> records = construirRegistrosCanonicos(recordId, canonicalData);
-                dataProductService.materialize(produto, records);
+                dataProductService.materializeOnly(produto, records);
             }
             subscriptionService.notifySubscribers(produto.getProductId(), EVENT_TYPE, envelope);
         }

@@ -37,11 +37,20 @@ public class DataProductService {
 
     private final DataProductRepository repository;
     private final DataProductRecordRepository recordRepository;
+    private final com.aurix.platform.openfinance.distribution.subscription.service.SubscriptionService subscriptionService;
 
     public DataProductService(DataProductRepository repository,
-                               DataProductRecordRepository recordRepository) {
+                              DataProductRecordRepository recordRepository) {
+        this(repository, recordRepository, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DataProductService(DataProductRepository repository,
+                              DataProductRecordRepository recordRepository,
+                              com.aurix.platform.openfinance.distribution.subscription.service.SubscriptionService subscriptionService) {
         this.repository = repository;
         this.recordRepository = recordRepository;
+        this.subscriptionService = subscriptionService;
     }
 
     /**
@@ -69,10 +78,31 @@ public class DataProductService {
 
     /**
      * Materializa dados no storage — persistidos de verdade em
-     * {@code data_product_records}, não apenas logados.
+     * {@code data_product_records}, não apenas logados — e notifica assinantes ativos
+     * do produto quando invocado diretamente.
      */
     @Transactional
     public void materialize(DataProduct product, List<CanonicalRecord> records) {
+        materializeOnly(product, records);
+        if (subscriptionService != null && !records.isEmpty()) {
+            subscriptionService.notifySubscribers(
+                    product.getProductId(),
+                    "data.published.v1",
+                    java.util.Map.of(
+                            "productId", product.getProductId(),
+                            "domain", product.getDomain(),
+                            "recordCount", records.size()
+                    ));
+        }
+    }
+
+    /**
+     * Persiste os registros canônicos e ativa o produto sem disparar notificação
+     * redundante (utilizado pelo {@code DataPublishedEventListener}, que já emite
+     * a notificação com o envelope completo de {@code data.published.v1}).
+     */
+    @Transactional
+    public void materializeOnly(DataProduct product, List<CanonicalRecord> records) {
         log.info("Materializando {} registros para produto {}",
                 records.size(), product.getProductId());
 

@@ -70,11 +70,31 @@ class DataPublishedEventListenerTest {
 
         listener.onDataPublished(envelope);
 
-        verify(dataProductService).materialize(eq(produto), argThat(records ->
+        verify(dataProductService).materializeOnly(eq(produto), argThat(records ->
                 records.size() == 1
                         && "pub-999".equals(records.get(0).getCanonicalId())
                         && canonicalJson.equals(records.get(0).getCanonicalData())));
         verify(subscriptionService).notifySubscribers("prod-contas", "data.published.v1", envelope);
+    }
+
+    @Test
+    void deveNotificarAssinantesAtivosQuandoConsentimentoForRevogadoOuExpirado() {
+        DataProductRepository repository = mock(DataProductRepository.class);
+        SubscriptionService subscriptionService = mock(SubscriptionService.class);
+
+        DataPublishedEventListener listener = new DataPublishedEventListener(repository, subscriptionService);
+
+        Map<String, Object> envelope = Map.of(
+                "eventType", "consent.revoked.v1",
+                "consentId", "consent-rev-1",
+                "reason", "REVOGADO_PELO_CLIENTE");
+        com.aurix.platform.openfinance.event.ConsentTerminatedEvent event =
+                new com.aurix.platform.openfinance.event.ConsentTerminatedEvent(
+                        "consent.revoked.v1", "consent-rev-1", "REVOGADO_PELO_CLIENTE", envelope);
+
+        listener.onConsentTerminated(event);
+
+        verify(subscriptionService).notifyAllActiveSubscribers("consent.revoked.v1", envelope);
     }
 
     @Test

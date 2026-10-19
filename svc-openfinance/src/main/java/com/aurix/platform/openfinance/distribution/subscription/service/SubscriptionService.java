@@ -43,11 +43,20 @@ public class SubscriptionService {
     private final SubscriptionRepository repository;
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
+    private final com.aurix.platform.openfinance.observability.OpenFinanceMetricsService metricsService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public SubscriptionService(SubscriptionRepository repository, ObjectMapper objectMapper) {
+        this(repository, objectMapper, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public SubscriptionService(SubscriptionRepository repository,
+                               ObjectMapper objectMapper,
+                               com.aurix.platform.openfinance.observability.OpenFinanceMetricsService metricsService) {
         this.repository = repository;
         this.objectMapper = objectMapper;
+        this.metricsService = metricsService;
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(WEBHOOK_TIMEOUT_MS);
         requestFactory.setReadTimeout(WEBHOOK_TIMEOUT_MS);
@@ -132,6 +141,30 @@ public class SubscriptionService {
     }
 
     /**
+     * Notifica todos os assinantes ativos cujos filtros de evento correspondam ao {@code eventType}
+     * (ex.: {@code consent.revoked.v1} ou {@code consent.expired.v1}).
+     */
+    public void notifyAllActiveSubscribers(String eventType, Object payload) {
+        List<Subscription> allSubscriptions = repository.findAll();
+        for (Subscription subscription : allSubscriptions) {
+            if (!subscription.isActive()) {
+                continue;
+            }
+            if (!matchesEvent(subscription.getEvents(), eventType)) {
+                continue;
+            }
+            deliverWebhook(subscription, eventType, payload);
+        }
+    }
+
+    /**
+     * Lista todas as assinaturas cadastradas.
+     */
+    public List<Subscription> listAll() {
+        return repository.findAll();
+    }
+
+    /**
      * Lista assinaturas por participante.
      */
     public List<Subscription> listByParticipant(String participantId) {
@@ -205,6 +238,9 @@ public class SubscriptionService {
                         .retrieve()
                         .toBodilessEntity();
 
+                if (metricsService != null) {
+                    metricsService.recordWebhookDelivery(eventType, true);
+                }
                 log.info("Webhook entregue para {} (tentativa {}): evento={}",
                         subscription.getCallbackUrl(), attempt + 1, eventType);
                 return;
@@ -224,6 +260,9 @@ public class SubscriptionService {
             }
         }
 
+        if (metricsService != null) {
+            metricsService.recordWebhookDelivery(eventType, false);
+        }
         log.error("Falha ao enviar webhook apos {} tentativas para {}",
                 maxRetries, subscription.getCallbackUrl());
     }
