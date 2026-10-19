@@ -28,11 +28,21 @@ public class ReconciliationService {
 
     private final ReconciliationRecordRepository reconciliationRepository;
     private final OpenFinanceEventPublisher eventPublisher;
+    private final ReconciliationRepairExecutor repairExecutor;
 
     public ReconciliationService(ReconciliationRecordRepository reconciliationRepository,
                                   OpenFinanceEventPublisher eventPublisher) {
+        this(reconciliationRepository, eventPublisher, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ReconciliationService(ReconciliationRecordRepository reconciliationRepository,
+                                  OpenFinanceEventPublisher eventPublisher,
+                                  @org.springframework.beans.factory.annotation.Autowired(required = false)
+                                  ReconciliationRepairExecutor repairExecutor) {
         this.reconciliationRepository = reconciliationRepository;
         this.eventPublisher = eventPublisher;
+        this.repairExecutor = repairExecutor;
     }
 
     /**
@@ -326,8 +336,11 @@ public class ReconciliationService {
 
     private int reextrairRegistrosDivergentes(ReconciliationRecord record) {
         log.info("Re-extraindo registros divergentes para node: {}", record.getNodeId());
-        int faltantes = record.getExpectedCount() - record.getActualCount();
-        return Math.abs(faltantes);
+        int faltantes = Math.abs(record.getExpectedCount() - record.getActualCount());
+        if (repairExecutor != null) {
+            return repairExecutor.reextrairNode(record.getPlanId(), record.getNodeId(), faltantes);
+        }
+        return faltantes;
     }
 
     private String gerarReconciliationId() {

@@ -37,6 +37,8 @@ public class DataQualityService {
             Set.of("CORRENTE", "POUPANCA", "SALARIO", "PAGAMENTO");
     private static final Set<String> TIPOS_TRANSACAO_VALIDOS =
             Set.of("CREDITO", "DEBITO", "CREDIT", "DEBIT");
+    private static final Set<String> TIPOS_INVESTIMENTO_VALIDOS =
+            Set.of("RENDA_FIXA", "RENDA_VARIAVEL", "TESOURO_DIRETO", "FUNDO", "CDB", "LCI", "LCA");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -130,6 +132,11 @@ public class DataQualityService {
             rules.add(new QualityRule("PIX001", "Chave PIX formato válido",
                     QualityRuleType.ACCURACY, QualityRuleSeverity.ERROR,
                     "chavePix FORMAT VALID", "PIX"));
+        } else if (type == ResourceType.INVESTIMENTO) {
+            rules.add(new QualityRule("INV001", "Tipo de investimento válido",
+                    QualityRuleType.ACCURACY, QualityRuleSeverity.ERROR,
+                    "type IN (RENDA_FIXA, RENDA_VARIAVEL, TESOURO_DIRETO, FUNDO, CDB, LCI, LCA)",
+                    "INVESTIMENTO"));
         }
 
         return rules;
@@ -224,6 +231,11 @@ public class DataQualityService {
                 avaliarCampoDominio(record.getCanonicalData(), "endToEndId",
                         valor -> valor != null && !valor.isBlank(),
                         rule, "Identificador endToEndId / chave PIX ausente ou vazio", issues);
+                break;
+            case "INV001":
+                avaliarCampoDominio(record.getCanonicalData(), "type",
+                        valor -> valor != null && TIPOS_INVESTIMENTO_VALIDOS.contains(valor.toUpperCase()),
+                        rule, "Tipo de investimento inválido no registro canônico", issues);
                 break;
             default:
                 break;

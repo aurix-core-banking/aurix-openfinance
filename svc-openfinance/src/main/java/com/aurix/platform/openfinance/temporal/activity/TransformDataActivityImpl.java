@@ -3,12 +3,17 @@ package com.aurix.platform.openfinance.temporal.activity;
 import com.aurix.platform.openfinance.pipeline.PipelineOrchestrator;
 import com.aurix.platform.openfinance.pipeline.ResourceType;
 import com.aurix.platform.openfinance.pipeline.canonicalization.entity.RawRecord;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import io.temporal.activity.Activity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -18,11 +23,17 @@ import java.util.UUID;
  * Qualidade de Dados + Classificação PII + Linhagem (INV03) — não simula mais
  * uma string concatenada. Publica o registro com PII mascarado (PiiResult.maskedRecord),
  * nunca o canônico sem proteção — a publicação NUNCA carrega dados pessoais em claro.
+ * Suporta processamento unitário e em lote (arrays de múltiplos registros extraídos).
  */
 @Component
 public class TransformDataActivityImpl implements TransformDataActivity {
 
     private static final Logger log = LoggerFactory.getLogger(TransformDataActivityImpl.class);
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    private static final List<String> CHAVES_ENVELOPE = List.of(
+            "contas", "transacoes", "cartoes", "faturas", "transacoes_cartao",
+            "emprestimos", "transacoes_pix", "investimentos", "records", "items", "data");
 
     private static final Map<String, ResourceType> RESOURCE_TYPE_BY_DOMAIN = Map.ofEntries(
             Map.entry("contas", ResourceType.CONTA),
@@ -53,31 +64,60 @@ public class TransformDataActivityImpl implements TransformDataActivity {
 
         try {
             ResourceType type = RESOURCE_TYPE_BY_DOMAIN.getOrDefault(request.getResource(), ResourceType.CONTA);
+            String rawPayload = request.getRawData() != null ? request.getRawData() : "{}";
+            List<String> payloadsIndividuais = desempacotarLote(rawPayload);
 
-            RawRecord raw = RawRecord.criar(
-                    UUID.randomUUID().toString(),
-                    "AURIX_CORE",
-                    request.getNodeId(),
-                    type,
-                    request.getRawData() != null ? request.getRawData() : "{}",
-                    LocalDateTime.now(),
-                    "1.0");
+            List<String> publicados = new ArrayList<>();
+            List<String> lineageIds = new ArrayList<>();
+            String sensitivityLevel = "PUBLIC";
 
-            PipelineOrchestrator.PipelineResult pipelineResult = pipelineOrchestrator.execute(
-                    raw, type, request.getExecutionPlanId(), request.getConsentId(), request.getResource());
+            for (String itemRawJson : payloadsIndividuais) {
+                RawRecord raw = RawRecord.criar(
+                        UUID.randomUUID().toString(),
+                        "AURIX_CORE",
+                        request.getNodeId(),
+                        type,
+                        itemRawJson,
+                        LocalDateTime.now(),
+                        "1.0");
 
-            if (!pipelineResult.isSucesso()) {
-                result.setSuccess(false);
-                result.setErrorMessage("Etapa " + pipelineResult.getEtapaFalha() + ": "
-                        + pipelineResult.getMensagemFalha());
-                return result;
+                PipelineOrchestrator.PipelineResult pipelineResult = pipelineOrchestrator.execute(
+                        raw, type, request.getExecutionPlanId(), request.getConsentId(), request.getResource());
+
+                if (!pipelineResult.isSucesso()) {
+                    result.setSuccess(false);
+                    result.setErrorMessage("Etapa " + pipelineResult.getEtapaFalha() + ": "
+                            + pipelineResult.getMensagemFalha());
+                    return result;
+                }
+
+                publicados.add(dadosParaPublicacao(pipelineResult));
+                if (pipelineResult.getLineageRecord() != null
+                        && pipelineResult.getLineageRecord().getLineageId() != null) {
+                    lineageIds.add(pipelineResult.getLineageRecord().getLineageId());
+                }
+                if (pipelineResult.getPiiResult() != null
+                        && pipelineResult.getPiiResult().getSensitivityLevel() != null) {
+                    sensitivityLevel = pipelineResult.getPiiResult().getSensitivityLevel().name();
+                }
             }
 
-            result.setRecordCount(request.getRecordCount());
-            result.setCanonicalData(dadosParaPublicacao(pipelineResult));
-            result.setLineageId(pipelineResult.getLineageRecord().getLineageId());
-            result.setSensitivityLevel(pipelineResult.getPiiResult() != null
-                    ? pipelineResult.getPiiResult().getSensitivityLevel().name() : "PUBLIC");
+            result.setRecordCount(Math.max(request.getRecordCount(), publicados.size()));
+            if (publicados.size() == 1) {
+                result.setCanonicalData(publicados.get(0));
+            } else {
+                ArrayNode arrayNode = OBJECT_MAPPER.createArrayNode();
+                for (String pub : publicados) {
+                    try {
+                        arrayNode.add(OBJECT_MAPPER.readTree(pub));
+                    } catch (Exception ignored) {
+                        arrayNode.add(pub);
+                    }
+                }
+                result.setCanonicalData(OBJECT_MAPPER.writeValueAsString(arrayNode));
+            }
+            result.setLineageId(String.join(",", lineageIds));
+            result.setSensitivityLevel(sensitivityLevel);
             result.setSuccess(true);
 
             long duration = System.currentTimeMillis() - startTime;
@@ -91,6 +131,34 @@ public class TransformDataActivityImpl implements TransformDataActivity {
             result.setErrorMessage(e.getMessage());
             return result;
         }
+    }
+
+    private List<String> desempacotarLote(String rawPayload) {
+        try {
+            JsonNode root = OBJECT_MAPPER.readTree(rawPayload);
+            if (root != null && root.isArray() && root.size() > 1) {
+                List<String> lista = new ArrayList<>(root.size());
+                for (JsonNode elem : root) {
+                    lista.add(OBJECT_MAPPER.writeValueAsString(elem));
+                }
+                return lista;
+            }
+            if (root != null && root.isObject()) {
+                for (String chave : CHAVES_ENVELOPE) {
+                    JsonNode arr = root.get(chave);
+                    if (arr != null && arr.isArray() && arr.size() > 1) {
+                        List<String> lista = new ArrayList<>(arr.size());
+                        for (JsonNode elem : arr) {
+                            lista.add(OBJECT_MAPPER.writeValueAsString(elem));
+                        }
+                        return lista;
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // fallback para registro único
+        }
+        return List.of(rawPayload);
     }
 
     /**

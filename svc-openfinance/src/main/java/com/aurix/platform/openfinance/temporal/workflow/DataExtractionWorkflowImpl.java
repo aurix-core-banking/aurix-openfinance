@@ -145,11 +145,16 @@ public class DataExtractionWorkflowImpl implements DataExtractionWorkflow {
                 try {
                     ExtractionResult.NodeResult result = promises.get(i).get();
                     nodeResults.put(nodeId, result);
-                    completed.add(nodeId);
 
-                    if (!result.isSuccess()) {
+                    if (result.isSuccess()) {
+                        completed.add(nodeId);
+                        for (String dependent : adjacencyList.getOrDefault(nodeId, List.of())) {
+                            inDegree.computeIfPresent(dependent, (k, v) -> v - 1);
+                        }
+                    } else {
                         failed.add(nodeId);
                         errors.add("Node " + nodeId + " falhou: " + result.getError());
+                        propagarFalhaParaDependentes(nodeId, adjacencyList, failed, nodeResults, errors);
                     }
                 } catch (Exception e) {
                     log.error("Erro ao executar node {}: {}", nodeId, e.getMessage());
@@ -160,14 +165,11 @@ public class DataExtractionWorkflowImpl implements DataExtractionWorkflow {
                     nodeResults.put(nodeId, failResult);
                     failed.add(nodeId);
                     errors.add("Node " + nodeId + " exceção: " + e.getMessage());
+                    propagarFalhaParaDependentes(nodeId, adjacencyList, failed, nodeResults, errors);
                 }
 
-                completedNodes++;
+                completedNodes = completed.size() + failed.size();
                 status.setProgressPercentage((double) completedNodes / totalNodes * 100);
-
-                for (String dependent : adjacencyList.getOrDefault(nodeId, List.of())) {
-                    inDegree.computeIfPresent(dependent, (k, v) -> v - 1);
-                }
             }
         }
 
@@ -175,7 +177,7 @@ public class DataExtractionWorkflowImpl implements DataExtractionWorkflow {
 
         ExtractionResult result = new ExtractionResult();
         result.setPlanId(plano.getPlanId());
-        result.setSuccess(failed.isEmpty());
+        result.setSuccess(failed.isEmpty() && !status.isCancelled());
         result.setNodesProcessed(completed.size());
         result.setNodesFailed(failed.size());
         result.setNodeResults(nodeResults);
@@ -188,10 +190,33 @@ public class DataExtractionWorkflowImpl implements DataExtractionWorkflow {
         return result;
     }
 
+    private void propagarFalhaParaDependentes(String failedNodeId,
+            Map<String, List<String>> adjacencyList,
+            Set<String> failed,
+            Map<String, ExtractionResult.NodeResult> nodeResults,
+            List<String> errors) {
+        Deque<String> fila = new ArrayDeque<>(adjacencyList.getOrDefault(failedNodeId, List.of()));
+        while (!fila.isEmpty()) {
+            String dep = fila.poll();
+            if (failed.add(dep)) {
+                ExtractionResult.NodeResult depFail = new ExtractionResult.NodeResult();
+                depFail.setNodeId(dep);
+                depFail.setSuccess(false);
+                depFail.setError("Dependência " + failedNodeId + " falhou");
+                nodeResults.put(dep, depFail);
+                errors.add("Node " + dep + " cancelado porque dependência " + failedNodeId + " falhou");
+                fila.addAll(adjacencyList.getOrDefault(dep, List.of()));
+            }
+        }
+    }
+
     private ExtractionResult.NodeResult executarNode(ExecutionPlanRequest plano,
             ExecutionPlanRequest.SerializableNode node) {
         long nodeStart = System.currentTimeMillis();
         log.info("Executando node: {} (recurso: {})", node.getNodeId(), node.getResource());
+
+        ExtractionResult.NodeResult nodeResult = new ExtractionResult.NodeResult();
+        nodeResult.setNodeId(node.getNodeId());
 
         ExtractDataActivity.ExtractRequest extractRequest = new ExtractDataActivity.ExtractRequest();
         extractRequest.setNodeId(node.getNodeId());
@@ -201,6 +226,13 @@ public class DataExtractionWorkflowImpl implements DataExtractionWorkflow {
         extractRequest.setTimeoutSeconds(node.getTimeoutSeconds());
 
         ExtractDataActivity.ExtractResult extractResult = extractActivity.extract(extractRequest);
+        if (extractResult == null || !extractResult.isSuccess()) {
+            nodeResult.setSuccess(false);
+            nodeResult.setError(extractResult != null ? extractResult.getErrorMessage() : "Extração retornou nulo");
+            nodeResult.setDurationMs(System.currentTimeMillis() - nodeStart);
+            return nodeResult;
+        }
+        nodeResult.setRecordsExtracted(extractResult.getRecordCount());
 
         TransformDataActivity.TransformRequest transformRequest = new TransformDataActivity.TransformRequest();
         transformRequest.setNodeId(node.getNodeId());
@@ -211,6 +243,13 @@ public class DataExtractionWorkflowImpl implements DataExtractionWorkflow {
         transformRequest.setRecordCount(extractResult.getRecordCount());
 
         TransformDataActivity.TransformResult transformResult = transformActivity.transform(transformRequest);
+        if (transformResult == null || !transformResult.isSuccess()) {
+            nodeResult.setSuccess(false);
+            nodeResult.setError(transformResult != null ? transformResult.getErrorMessage() : "Transformação retornou nulo");
+            nodeResult.setDurationMs(System.currentTimeMillis() - nodeStart);
+            return nodeResult;
+        }
+        nodeResult.setRecordsTransformed(transformResult.getRecordCount());
 
         PublishDataActivity.PublishRequest publishRequest = new PublishDataActivity.PublishRequest();
         publishRequest.setNodeId(node.getNodeId());
@@ -223,12 +262,14 @@ public class DataExtractionWorkflowImpl implements DataExtractionWorkflow {
         publishRequest.setSensitivityLevel(transformResult.getSensitivityLevel());
 
         PublishDataActivity.PublishResult publishResult = publishActivity.publish(publishRequest);
+        if (publishResult == null || !publishResult.isSuccess()) {
+            nodeResult.setSuccess(false);
+            nodeResult.setError(publishResult != null ? publishResult.getErrorMessage() : "Publicação retornou nulo");
+            nodeResult.setDurationMs(System.currentTimeMillis() - nodeStart);
+            return nodeResult;
+        }
 
-        ExtractionResult.NodeResult nodeResult = new ExtractionResult.NodeResult();
-        nodeResult.setNodeId(node.getNodeId());
         nodeResult.setSuccess(true);
-        nodeResult.setRecordsExtracted(extractResult.getRecordCount());
-        nodeResult.setRecordsTransformed(transformResult.getRecordCount());
         nodeResult.setRecordsPublished(publishResult.getPublishedCount());
         nodeResult.setDurationMs(System.currentTimeMillis() - nodeStart);
 

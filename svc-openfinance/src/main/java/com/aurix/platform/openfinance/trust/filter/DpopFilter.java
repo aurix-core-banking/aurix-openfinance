@@ -33,7 +33,10 @@ import java.util.Map;
 @Component
 public class DpopFilter extends OncePerRequestFilter {
 
+    public static final String FAPI_INTERACTION_ID_HEADER = "x-fapi-interaction-id";
+
     private final ProofOfPossessionVerifier proofOfPossessionVerifier;
+    private final TrustPlaneService trustPlaneService;
     private final boolean enabled;
     private final boolean require;
 
@@ -41,7 +44,18 @@ public class DpopFilter extends OncePerRequestFilter {
             ProofOfPossessionVerifier proofOfPossessionVerifier,
             @Value("${aurix.openfinance.trust.dpop.enabled:true}") boolean enabled,
             @Value("${aurix.openfinance.trust.dpop.require:true}") boolean require) {
+        this(proofOfPossessionVerifier, null, enabled, require);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DpopFilter(
+            ProofOfPossessionVerifier proofOfPossessionVerifier,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            TrustPlaneService trustPlaneService,
+            @Value("${aurix.openfinance.trust.dpop.enabled:true}") boolean enabled,
+            @Value("${aurix.openfinance.trust.dpop.require:true}") boolean require) {
         this.proofOfPossessionVerifier = proofOfPossessionVerifier;
+        this.trustPlaneService = trustPlaneService;
         this.enabled = enabled;
         this.require = require;
     }
@@ -49,6 +63,12 @@ public class DpopFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
+        String interactionId = request.getHeader(FAPI_INTERACTION_ID_HEADER);
+        if (!StringUtils.hasText(interactionId)) {
+            interactionId = java.util.UUID.randomUUID().toString();
+        }
+        response.setHeader(FAPI_INTERACTION_ID_HEADER, interactionId);
+
         if (!enabled) {
             filterChain.doFilter(request, response);
             return;
@@ -81,12 +101,27 @@ public class DpopFilter extends OncePerRequestFilter {
             return;
         }
 
-        boolean verified = proofOfPossessionVerifier.verify(dpopProof,
-                request.getMethod(), request.getRequestURL().toString(), accessTokenJkt);
+        boolean verified;
+        String sslVerify = request.getHeader("X-SSL-Client-Verify");
+        if (trustPlaneService != null && StringUtils.hasText(sslVerify)) {
+            Map<String, String> headers = new HashMap<>();
+            headers.put("X-SSL-Client-Verify", sslVerify);
+            String certSubject = request.getHeader("X-SSL-Client-S-DN");
+            if (certSubject != null) {
+                headers.put("subject", certSubject);
+                headers.put("X-SSL-Client-S-DN", certSubject);
+            }
+            var trustResult = trustPlaneService.verify(
+                    headers, request.getMethod(), request.getRequestURL().toString(), accessTokenJkt, dpopProof);
+            verified = trustResult.allowed();
+        } else {
+            verified = proofOfPossessionVerifier.verify(dpopProof,
+                    request.getMethod(), request.getRequestURL().toString(), accessTokenJkt);
+        }
 
         if (!verified) {
             response.sendError(HttpStatus.UNAUTHORIZED.value(),
-                    "DPoP proof inválido: " + request.getRequestURI());
+                    "DPoP/FAPI proof inválido: " + request.getRequestURI());
             return;
         }
 

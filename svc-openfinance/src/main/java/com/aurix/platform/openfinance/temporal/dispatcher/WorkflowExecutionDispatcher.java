@@ -105,6 +105,28 @@ public class WorkflowExecutionDispatcher {
         }
     }
 
+    /**
+     * Envia o sinal {@code cancelarExtracao} ao workflow Temporal em execução.
+     */
+    public boolean cancelarWorkflow(String consentId, String planId, String motivo) {
+        if (!enabled || workflowClient == null) {
+            log.warn("Dispatcher indisponível (enabled={}, client={}) — sinal de cancelamento não enviado para plano {}",
+                    enabled, workflowClient == null ? "null" : "ok", planId);
+            return false;
+        }
+        try {
+            String workflowId = "of-extraction-" + consentId + "-" + planId;
+            DataExtractionWorkflow workflow = workflowClient.newWorkflowStub(
+                    DataExtractionWorkflow.class, workflowId);
+            workflow.cancelarExtracao(motivo);
+            log.info("Sinal cancelarExtracao enviado ao Temporal: workflowId={}, motivo={}", workflowId, motivo);
+            return true;
+        } catch (Exception e) {
+            log.warn("Falha ao enviar sinal de cancelamento ao Temporal para plano {}: {}", planId, e.getMessage());
+            return false;
+        }
+    }
+
     @PreDestroy
     public void close() {
         if (serviceStubs != null) {

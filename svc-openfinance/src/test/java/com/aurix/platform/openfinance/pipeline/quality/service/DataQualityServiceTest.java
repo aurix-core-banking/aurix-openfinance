@@ -83,6 +83,13 @@ class DataQualityServiceTest {
                 ResourceType.PIX);
         assertFalse(resPix.getIssues().stream().filter(i -> "PIX001".equals(i.getRuleId())).toList().isEmpty(),
                 "Deveria apontar violação em PIX001 quando endToEndId/chavePix estiver inválido");
+
+        String jsonInvInvalido = "{\"investmentId\":\"inv-1\",\"type\":\"MEMECOIN_INVALIDA\"}";
+        QualityResult resInv = service.checkQuality(
+                criarRecord(ResourceType.INVESTIMENTO, jsonInvInvalido, sha256(jsonInvInvalido)),
+                ResourceType.INVESTIMENTO);
+        assertTrue(resInv.getIssues().stream().anyMatch(i -> "INV001".equals(i.getRuleId())),
+                "Deveria apontar violação em INV001 para tipo de investimento inválido");
     }
 
     private CanonicalRecord criarRecord(final ResourceType type, final String json, final String checksum) {
