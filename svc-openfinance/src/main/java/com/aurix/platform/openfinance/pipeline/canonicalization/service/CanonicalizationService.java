@@ -50,10 +50,11 @@ public class CanonicalizationService {
     private static final Set<String> STATUS_SEGURO = Set.of("ATIVA", "CANCELADA", "VENCIDA");
     private static final Set<String> TIPOS_PESSOA = Set.of("PF", "PJ");
     private static final Set<String> STATUS_PESSOA = Set.of("ATIVO", "INATIVO");
+    private static final Set<String> STATUS_PARCELA_CREDITO = Set.of("PENDENTE", "PAGA", "ATRASADA");
 
     private static final List<String> CHAVES_ENVELOPE = List.of(
-            "contas", "transacoes", "cartoes", "faturas", "transacoes_cartao",
-            "emprestimos", "transacoes_pix", "investimentos", "seguros", "pessoas",
+            "contas", "saldos", "transacoes", "cartoes", "faturas", "transacoes_cartao",
+            "emprestimos", "parcelas_emprestimo", "transacoes_pix", "investimentos", "seguros", "pessoas",
             "records", "items", "data");
 
     private static final Map<String, String> SINONIMOS_TIPO_CONTA = Map.ofEntries(
@@ -186,6 +187,12 @@ public class CanonicalizationService {
                 break;
             case PESSOA:
                 canonicalData = canonicalizePessoa(raw.getRawData());
+                break;
+            case SALDO:
+                canonicalData = canonicalizeSaldo(raw.getRawData());
+                break;
+            case PARCELA_CREDITO:
+                canonicalData = canonicalizeParcelaCredito(raw.getRawData());
                 break;
             default:
                 canonicalData = raw.getRawData();
@@ -423,6 +430,50 @@ public class CanonicalizationService {
             JsonNode node = objectMapper.readTree(json);
             if (node.isObject() && (!node.has("status") || node.get("status").isNull())) {
                 ((ObjectNode) node).put("status", "ATIVO");
+                return objectMapper.writeValueAsString(node);
+            }
+        } catch (Exception ignored) {
+            // mantém json original se não for objeto
+        }
+        return json;
+    }
+
+    /**
+     * Canonicaliza dados de saldo bancário conforme {@code data-models.yaml} ({@code balance}).
+     *
+     * @param rawData dados brutos JSON.
+     * @return JSON canônico.
+     */
+    public String canonicalizeSaldo(final String rawData) {
+        log.debug("Canonicalizando dados de saldo bancário");
+        return mapearCampos(rawData, List.of(
+                campo("balanceId", "balanceId", "saldoId", "idSaldo", "id"),
+                campo("accountId", "accountId", "contaId", "idConta"),
+                campo("available", TipoCampo.DECIMAL, "available", "availableBalance", "saldoDisponivel", "disponivel"),
+                campo("blocked", TipoCampo.DECIMAL, "blocked", "blockedBalance", "saldoBloqueado", "bloqueado"),
+                campo("updateTimestamp", TipoCampo.DATA, "updateTimestamp", "updatedAt", "dataAtualizacao", "timestamp")));
+    }
+
+    /**
+     * Canonicaliza dados de parcela de empréstimo conforme {@code data-models.yaml} ({@code loanInstallment}).
+     *
+     * @param rawData dados brutos JSON.
+     * @return JSON canônico.
+     */
+    public String canonicalizeParcelaCredito(final String rawData) {
+        log.debug("Canonicalizando dados de parcela de empréstimo");
+        String json = mapearCampos(rawData, List.of(
+                campo("installmentId", "installmentId", "parcelaId", "idParcela", "id"),
+                campo("loanId", "loanId", "emprestimoId", "idEmprestimo"),
+                campo("number", "number", "numeroParcela", "numero"),
+                campo("amount", TipoCampo.DECIMAL, "amount", "installmentAmount", "valorParcela", "valor"),
+                campo("dueDate", TipoCampo.DATA, "dueDate", "dataVencimento"),
+                campo("status", TipoCampo.ENUM, Map.of("PENDING", "PENDENTE", "PAID", "PAGA", "OVERDUE", "ATRASADA"),
+                        STATUS_PARCELA_CREDITO, "status", "statusParcela", "situacao")));
+        try {
+            JsonNode node = objectMapper.readTree(json);
+            if (node.isObject() && (!node.has("status") || node.get("status").isNull())) {
+                ((ObjectNode) node).put("status", "PENDENTE");
                 return objectMapper.writeValueAsString(node);
             }
         } catch (Exception ignored) {

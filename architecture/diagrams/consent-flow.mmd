@@ -1,18 +1,22 @@
 sequenceDiagram
     participant Participant
-    participant FAPI
-    participant Consent
-    participant Discovery
-    participant Policy
-    participant Planner
-    participant Temporal
+    participant Filter as FAPI-Brazil / mTLS + DPoP
+    participant Consent as Consent Service
+    participant Receipt as Consent Receipt (ES256)
+    participant Discovery as Resource Discovery
+    participant Policy as Policy Engine
+    participant Context as Authorized Context
+    participant Planner as Extraction Planner (DAG)
+    participant Temporal as Temporal Engine
 
-    Participant->>FAPI: POST /oauth/authorize (FAPI-Brazil)
-    FAPI->>Consent: Create consent + permissions
-    Consent-->>Participant: consentId + permissions
-    Participant->>Consent: POST /consents/{id}/authorize
-    Consent->>Discovery: Discover accessible resources
-    Discovery->>Policy: Evaluate authorized resources
-    Policy->>Planner: Authorized context (immutable)
-    Planner->>Temporal: Execution plan (DAG)
-    Temporal-->>Participant: Workflow started
+    Participant->>Filter: POST /api/v1/open-finance/consents (mTLS + DPoP)
+    Filter->>Consent: Criar consentimento (AES-256-GCM at rest)
+    Consent->>Receipt: Emitir recibo assinado (ES256)
+    Consent-->>Participant: 201 Created (consentId, v1)
+    Participant->>Consent: Autorizar consentimento (AUTHORISED)
+    Consent->>Discovery: Descobrir grafo de recursos (ConsentGrantedEvent)
+    Discovery->>Policy: Avaliar recursos autorizados (INV-001, INV-002)
+    Policy->>Context: Emitir AuthorizedContext imutável assinado (INV-005)
+    Context->>Planner: Gerar ExecutionPlan DAG (consent-to-execution)
+    Planner->>Temporal: Iniciar DataExtractionWorkflow + ConsentMonitoringWorkflow
+    Temporal-->>Participant: Workflows em execução

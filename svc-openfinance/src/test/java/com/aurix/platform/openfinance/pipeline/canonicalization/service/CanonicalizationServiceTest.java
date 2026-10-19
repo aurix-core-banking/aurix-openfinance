@@ -290,4 +290,43 @@ class CanonicalizationServiceTest {
         assertEquals("Maria Aurix Silva", resultado.get("fullName").asText());
         assertEquals("ATIVO", resultado.get("status").asText());
     }
+
+    @Test
+    void canonicalizeSaldoMapeiaCamposDeSaldoDisponivelEBloqueado() throws Exception {
+        String envelopeSaldo = """
+                {"saldos":[{"balanceId":"bal-acc-1","accountId":"acc-1","available":"3500,50",
+                            "blocked":"0,00","updateTimestamp":"2026-10-19T01:00:00"}]}
+                """;
+        RawRecord raw = RawRecord.criar("rec-sal-1", "AURIX_CORE", "node-saldos",
+                ResourceType.SALDO, envelopeSaldo, LocalDateTime.now(), "1.0");
+
+        CanonicalRecord record = service.canonicalize(raw, ResourceType.SALDO);
+        JsonNode resultado = mapper.readTree(record.getCanonicalData());
+
+        assertEquals("bal-acc-1", resultado.get("balanceId").asText());
+        assertEquals("acc-1", resultado.get("accountId").asText());
+        assertEquals("3500.50", resultado.get("available").asText());
+        assertEquals("0.00", resultado.get("blocked").asText());
+        assertEquals("2026-10-19T01:00:00", resultado.get("updateTimestamp").asText());
+    }
+
+    @Test
+    void canonicalizeParcelaCreditoMapeiaCamposEConverteEnums() throws Exception {
+        String envelopeParcela = """
+                {"parcelas_emprestimo":[{"installmentId":"inst-loan-1-1","loanId":"loan-1","number":7,
+                                         "amount":"950,00","dueDate":"2026-11-15","status":"PENDING"}]}
+                """;
+        RawRecord raw = RawRecord.criar("rec-par-1", "AURIX_CORE", "node-parcelas_emprestimo",
+                ResourceType.PARCELA_CREDITO, envelopeParcela, LocalDateTime.now(), "1.0");
+
+        CanonicalRecord record = service.canonicalize(raw, ResourceType.PARCELA_CREDITO);
+        JsonNode resultado = mapper.readTree(record.getCanonicalData());
+
+        assertEquals("inst-loan-1-1", resultado.get("installmentId").asText());
+        assertEquals("loan-1", resultado.get("loanId").asText());
+        assertEquals("7", resultado.get("number").asText());
+        assertEquals("950.00", resultado.get("amount").asText());
+        assertEquals("2026-11-15", resultado.get("dueDate").asText());
+        assertEquals("PENDENTE", resultado.get("status").asText());
+    }
 }

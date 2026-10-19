@@ -32,11 +32,13 @@ public class ExtractDataActivityImpl implements ExtractDataActivity {
 
     private static final Map<String, ResourceType> RESOURCE_TYPE_BY_DOMAIN = Map.ofEntries(
             Map.entry("contas", ResourceType.ACCOUNTS),
+            Map.entry("saldos", ResourceType.BALANCES),
             Map.entry("transacoes", ResourceType.TRANSACTIONS),
             Map.entry("cartoes", ResourceType.CREDIT_CARDS),
             Map.entry("faturas", ResourceType.CARD_BILLS),
             Map.entry("transacoes_cartao", ResourceType.CARD_TRANSACTIONS),
             Map.entry("emprestimos", ResourceType.LOANS),
+            Map.entry("parcelas_emprestimo", ResourceType.LOAN_INSTALLMENTS),
             Map.entry("pix", ResourceType.PIX_TRANSACTIONS),
             Map.entry("investimentos", ResourceType.INVESTMENTS),
             Map.entry("seguros", ResourceType.INSURANCE),

@@ -53,7 +53,17 @@ public enum ResourceType {
     /**
      * Dados cadastrais de pessoa física ou jurídica.
      */
-    PESSOA("Pessoa");
+    PESSOA("Pessoa"),
+
+    /**
+     * Saldo disponível e bloqueado de conta bancária.
+     */
+    SALDO("Saldo"),
+
+    /**
+     * Parcela de operação de crédito/empréstimo.
+     */
+    PARCELA_CREDITO("Parcela de Crédito");
 
     /**
      * Descrição do tipo.

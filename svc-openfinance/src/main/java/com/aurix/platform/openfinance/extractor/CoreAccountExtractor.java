@@ -27,6 +27,35 @@ public class CoreAccountExtractor extends BaseExtractor {
 
     @Override
     protected RawData doExtract(AuthorizedContext context, ResourceDescriptor resource) {
+        if (resource.getResourceType() == ResourceType.TRANSACTIONS) {
+            List<AccountSourceAdapter.Transaction> transacoes = sourceAdapter.findTransactions(context.getConsentId());
+            return RawData.builder()
+                    .resourceType(resource.getResourceType())
+                    .contextId(context.getContextId())
+                    .payload(Map.of("transacoes", transacoes))
+                    .recordCount(transacoes.size())
+                    .extractedAt(java.time.LocalDateTime.now())
+                    .build();
+        }
+        if (resource.getResourceType() == ResourceType.BALANCES) {
+            List<Map<String, Object>> saldos = sourceAdapter.findAccounts(context.getConsentId()).stream()
+                    .map(a -> Map.<String, Object>of(
+                            "balanceId", "bal-" + a.accountId(),
+                            "accountId", a.accountId(),
+                            "available", a.availableBalance() != null ? a.availableBalance() : java.math.BigDecimal.ZERO,
+                            "blocked", java.math.BigDecimal.ZERO,
+                            "updateTimestamp", a.updatedAt() != null ? a.updatedAt() : java.time.LocalDateTime.now()
+                    ))
+                    .toList();
+            return RawData.builder()
+                    .resourceType(resource.getResourceType())
+                    .contextId(context.getContextId())
+                    .payload(Map.of("saldos", saldos))
+                    .recordCount(saldos.size())
+                    .extractedAt(java.time.LocalDateTime.now())
+                    .build();
+        }
+
         List<AccountSourceAdapter.Account> contas = sourceAdapter.findAccounts(context.getConsentId());
         List<AccountSourceAdapter.Transaction> transacoes = sourceAdapter.findTransactions(context.getConsentId());
 
