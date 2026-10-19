@@ -45,7 +45,7 @@ public class SubscriptionController {
         } else if (dataProductId != null) {
             subscriptions = service.listByDataProduct(dataProductId);
         } else {
-            subscriptions = List.of();
+            subscriptions = service.listAll();
         }
 
         return ResponseEntity.ok(subscriptions);

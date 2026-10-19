@@ -77,6 +77,15 @@ public class OpenFinanceMetricsService {
                 .increment();
     }
 
+    public void recordWebhookDelivery(String eventType, boolean success) {
+        Counter.builder("openfinance_webhook_deliveries_total")
+                .description("Total de entregas de webhook a assinantes por tipo de evento e resultado")
+                .tag("event_type", eventType != null ? eventType : "unknown")
+                .tag("outcome", success ? "SUCCESS" : "FAILURE")
+                .register(meterRegistry)
+                .increment();
+    }
+
     public MeterRegistry getMeterRegistry() {
         return meterRegistry;
     }

@@ -119,10 +119,17 @@ class DataExtractionWorkflowIntegrationTest {
     @Autowired
     private DataProductRecordRepository dataProductRecordRepository;
 
+    @Autowired
+    private com.aurix.platform.openfinance.distribution.subscription.service.SubscriptionService subscriptionService;
+
+    @Autowired
+    private com.aurix.platform.openfinance.distribution.subscription.repository.SubscriptionRepository subscriptionRepository;
+
     private TestWorkflowEnvironment testEnv;
 
     @BeforeEach
     void setUp() {
+        subscriptionRepository.deleteAll();
         dataProductRecordRepository.deleteAll();
         dataProductRepository.deleteAll();
         transacaoCartaoRepository.deleteAll();
@@ -529,5 +536,95 @@ class DataExtractionWorkflowIntegrationTest {
 
         assertEquals(1, dataProductService.serve(prodPessoas.getProductId(), null).getTotalCount());
         assertTrue(dataProductService.serve(prodPessoas.getProductId(), null).getRecords().get(0).toString().contains("cust-13-1"));
+    }
+
+    @Test
+    void deveEntregarWebhookHttpAssinadoAoFinalDoWorkflowTemporalDeExtracao() throws Exception {
+        com.sun.net.httpserver.HttpServer webhookServer =
+                com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("localhost", 0), 0);
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicReference<String> bodyRef = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<String> sigRef = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<String> tsRef = new java.util.concurrent.atomic.AtomicReference<>();
+
+        webhookServer.createContext("/webhook-e2e", exchange -> {
+            bodyRef.set(new String(exchange.getRequestBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+            sigRef.set(exchange.getRequestHeaders().getFirst("X-Webhook-Signature"));
+            tsRef.set(exchange.getRequestHeaders().getFirst("X-Webhook-Timestamp"));
+            exchange.sendResponseHeaders(200, -1);
+            exchange.close();
+            latch.countDown();
+        });
+        webhookServer.start();
+
+        try {
+            String consentId = "consent-webhook-temporal-e2e";
+            Consentimento consentimento = new Consentimento();
+            consentimento.setConsentId(consentId);
+            consentimento.setClientId("client-wh-e2e");
+            consentimento.setUserId(77L);
+            consentimento.setStatus(Consentimento.StatusConsentimento.AUTHORISED);
+            consentimento.setPermissions("accounts");
+            consentimento.setDataCriacao(LocalDateTime.now());
+            consentimento.setDataExpiracao(LocalDateTime.now().plusDays(30));
+            consentimentoRepository.save(consentimento);
+
+            ContaConsentida conta = new ContaConsentida();
+            conta.setConsentId(consentId);
+            conta.setAccountId("acc-wh-e2e-1");
+            conta.setInstitutionCode("AURIX");
+            conta.setMoeda("BRL");
+            conta.setTipoConta(ContaConsentida.TipoConta.CONTA_DE_DEPOSITO);
+            conta.setStatusConta("ACTIVE");
+            conta.setDataAtualizacao(LocalDateTime.now());
+            contaRepository.save(conta);
+
+            AuthorizedContext context = new AuthorizedContext(
+                    "ctx-wh-" + UUID.randomUUID(), "subject-wh", consentId, 1,
+                    "accounts", "[\"accounts:READ\"]", "[\"contas\"]",
+                    LocalDateTime.now().plusHours(1), "ES256", "thumb-wh", "sig-wh");
+            authorizedContextRepository.save(context);
+
+            DataProduct prodContas = dataProductService.create(new DataProductRequest(
+                    "Contas Webhook E2E", "Produto de contas com webhook", "contas",
+                    "CONTA", "json", "{}", "/api/v1/data-products/contas-wh"));
+
+            String callbackUrl = "http://localhost:" + webhookServer.getAddress().getPort() + "/webhook-e2e";
+            var subscription = subscriptionService.subscribe(
+                    new com.aurix.platform.openfinance.distribution.subscription.dto.SubscriptionRequest(
+                            "participant-wh-e2e", prodContas.getProductId(), callbackUrl, "data.published.v1", 30));
+
+            ExecutionPlanRequest.SerializableNode nodeContas = new ExecutionPlanRequest.SerializableNode();
+            nodeContas.setNodeId("node-contas");
+            nodeContas.setCapability("extract-accounts");
+            nodeContas.setResource("contas");
+            nodeContas.setDependencies(List.of());
+            nodeContas.setIdempotencyKey(UUID.randomUUID().toString());
+            nodeContas.setTimeoutSeconds(30);
+
+            ExecutionPlanRequest plano = new ExecutionPlanRequest();
+            plano.setPlanId("plan-wh-" + UUID.randomUUID());
+            plano.setConsentId(consentId);
+            plano.setConsentVersion(1);
+            plano.setParticipantId("participant-wh-e2e");
+            plano.setNodes(List.of(nodeContas));
+
+            WorkflowClient client = testEnv.getWorkflowClient();
+            DataExtractionWorkflow workflow = client.newWorkflowStub(DataExtractionWorkflow.class,
+                    WorkflowOptions.newBuilder().setTaskQueue(TASK_QUEUE).build());
+
+            ExtractionResult result = workflow.execute(plano);
+            assertTrue(result.isSuccess());
+
+            assertTrue(latch.await(5, java.util.concurrent.TimeUnit.SECONDS),
+                    "O assinante deveria receber o POST HTTP do webhook ao final do workflow Temporal");
+            assertNotNull(bodyRef.get());
+            assertTrue(bodyRef.get().contains("acc-wh-e2e-1"));
+            assertTrue(bodyRef.get().contains(subscription.getSubscriptionId()));
+            assertNotNull(sigRef.get());
+            assertNotNull(tsRef.get());
+        } finally {
+            webhookServer.stop(0);
+        }
     }
 }
