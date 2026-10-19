@@ -281,12 +281,15 @@ services:
   extractors:
     ownership: openfinance-team
     layer: data-plane
+    responsibilities:
+      - Extract authorized resources via source adapters
+      - Enforce INV-001 and INV-002 in BaseExtractor
     
     interface: DataExtractor
     methods:
-      - extract(context: AuthorizedContext, resource: ResourceDescriptor): RawData
-      - validate(data: RawData): ValidationResult
-      - supports(resource: ResourceType): boolean
+      - "extract(context: AuthorizedContext, resource: ResourceDescriptor): RawData"
+      - "validate(data: RawData): ValidationResult"
+      - "supports(resource: ResourceType): boolean"
     
     implementations:
       CoreAccountExtractor:
@@ -303,6 +306,12 @@ services:
         source: PostgreSQL
       CoreInvestmentExtractor:
         supports: [INVESTMENTS, INVESTMENT_TRANSACTIONS]
+        source: PostgreSQL
+      CoreInsuranceExtractor:
+        supports: [INSURANCE]
+        source: PostgreSQL
+      CoreCustomerExtractor:
+        supports: [CUSTOMERS]
         source: PostgreSQL
 
   data-products:

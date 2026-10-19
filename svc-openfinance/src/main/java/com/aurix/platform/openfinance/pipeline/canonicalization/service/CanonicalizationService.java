@@ -45,10 +45,16 @@ public class CanonicalizationService {
     private static final Set<String> STATUS_CREDITO = Set.of("ATIVO", "QUITADO", "ATRASADO");
     private static final Set<String> TIPOS_INVESTIMENTO = Set.of("CDB", "LCI", "LCA", "FUNDO", "TESOURO");
     private static final Set<String> STATUS_INVESTIMENTO = Set.of("ATIVO", "RESGATADO", "VENCIDO");
+    private static final Set<String> STATUS_FATURA = Set.of("ABERTA", "PAGA", "VENCIDA", "PARCIAL");
+    private static final Set<String> TIPOS_SEGURO = Set.of("VIDA", "AUTO", "RESIDENCIAL", "PRESTAMISTA");
+    private static final Set<String> STATUS_SEGURO = Set.of("ATIVA", "CANCELADA", "VENCIDA");
+    private static final Set<String> TIPOS_PESSOA = Set.of("PF", "PJ");
+    private static final Set<String> STATUS_PESSOA = Set.of("ATIVO", "INATIVO");
 
     private static final List<String> CHAVES_ENVELOPE = List.of(
             "contas", "transacoes", "cartoes", "faturas", "transacoes_cartao",
-            "emprestimos", "transacoes_pix", "investimentos", "records", "items", "data");
+            "emprestimos", "transacoes_pix", "investimentos", "seguros", "pessoas",
+            "records", "items", "data");
 
     private static final Map<String, String> SINONIMOS_TIPO_CONTA = Map.ofEntries(
             Map.entry("CORRENTE", "CONTA_CORRENTE"),
@@ -107,6 +113,35 @@ public class CanonicalizationService {
             Map.entry("REDEEMED", "RESGATADO"),
             Map.entry("EXPIRED", "VENCIDO"),
             Map.entry("MATURED", "VENCIDO"));
+    private static final Map<String, String> SINONIMOS_STATUS_FATURA = Map.ofEntries(
+            Map.entry("OPEN", "ABERTA"),
+            Map.entry("PAID", "PAGA"),
+            Map.entry("OVERDUE", "VENCIDA"),
+            Map.entry("PARTIAL", "PARCIAL"));
+    private static final Map<String, String> SINONIMOS_TIPO_SEGURO = Map.ofEntries(
+            Map.entry("LIFE", "VIDA"),
+            Map.entry("SEGURO_VIDA", "VIDA"),
+            Map.entry("AUTOMOVEL", "AUTO"),
+            Map.entry("HOME", "RESIDENCIAL"),
+            Map.entry("CREDIT_LIFE", "PRESTAMISTA"));
+    private static final Map<String, String> SINONIMOS_STATUS_SEGURO = Map.ofEntries(
+            Map.entry("ACTIVE", "ATIVA"),
+            Map.entry("ATIVO", "ATIVA"),
+            Map.entry("VIGENTE", "ATIVA"),
+            Map.entry("CANCELLED", "CANCELADA"),
+            Map.entry("CANCELADO", "CANCELADA"),
+            Map.entry("EXPIRED", "VENCIDA"),
+            Map.entry("VENCIDO", "VENCIDA"));
+    private static final Map<String, String> SINONIMOS_TIPO_PESSOA = Map.ofEntries(
+            Map.entry("FISICA", "PF"),
+            Map.entry("PESSOA_FISICA", "PF"),
+            Map.entry("JURIDICA", "PJ"),
+            Map.entry("PESSOA_JURIDICA", "PJ"));
+    private static final Map<String, String> SINONIMOS_STATUS_PESSOA = Map.ofEntries(
+            Map.entry("ACTIVE", "ATIVO"),
+            Map.entry("ATIVA", "ATIVO"),
+            Map.entry("INACTIVE", "INATIVO"),
+            Map.entry("INATIVA", "INATIVO"));
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -139,6 +174,18 @@ public class CanonicalizationService {
                 break;
             case INVESTIMENTO:
                 canonicalData = canonicalizeInvestimento(raw.getRawData());
+                break;
+            case FATURA_CARTAO:
+                canonicalData = canonicalizeFaturaCartao(raw.getRawData());
+                break;
+            case TRANSACAO_CARTAO:
+                canonicalData = canonicalizeTransacaoCartao(raw.getRawData());
+                break;
+            case SEGURO:
+                canonicalData = canonicalizeSeguro(raw.getRawData());
+                break;
+            case PESSOA:
+                canonicalData = canonicalizePessoa(raw.getRawData());
                 break;
             default:
                 canonicalData = raw.getRawData();
@@ -266,6 +313,112 @@ public class CanonicalizationService {
                 campo("currentValue", TipoCampo.DECIMAL, "currentValue", "totalValue", "valorAtual", "valorTotal", "saldoBruto"),
                 campo("appliedAmount", TipoCampo.DECIMAL, "appliedAmount", "unitValue", "valorAplicado", "valorInvestido", "principal"),
                 campo("status", TipoCampo.ENUM, SINONIMOS_STATUS_INVESTIMENTO, STATUS_INVESTIMENTO, "status", "statusInvestimento", "situacao")));
+        try {
+            JsonNode node = objectMapper.readTree(json);
+            if (node.isObject() && (!node.has("status") || node.get("status").isNull())) {
+                ((ObjectNode) node).put("status", "ATIVO");
+                return objectMapper.writeValueAsString(node);
+            }
+        } catch (Exception ignored) {
+            // mantém json original se não for objeto
+        }
+        return json;
+    }
+
+    /**
+     * Canonicaliza dados de fatura de cartão conforme {@code data-models.yaml} ({@code card_bill}).
+     *
+     * @param rawData dados brutos JSON.
+     * @return JSON canônico.
+     */
+    public String canonicalizeFaturaCartao(final String rawData) {
+        log.debug("Canonicalizando dados de fatura de cartão");
+        String json = mapearCampos(rawData, List.of(
+                campo("billId", "billId", "faturaId", "idFatura", "id"),
+                campo("cardId", "cardId", "cartaoId", "idCartao"),
+                campo("referenceDate", TipoCampo.DATA, "referenceDate", "dataReferencia", "dueDate", "dataVencimento"),
+                campo("dueDate", TipoCampo.DATA, "dueDate", "dataVencimento"),
+                campo("totalAmount", TipoCampo.DECIMAL, "totalAmount", "valorTotal", "amount", "valor"),
+                campo("minimumAmount", TipoCampo.DECIMAL, "minimumAmount", "valorMinimo"),
+                campo("paidAmount", TipoCampo.DECIMAL, "paidAmount", "valorPago"),
+                campo("status", TipoCampo.ENUM, SINONIMOS_STATUS_FATURA, STATUS_FATURA, "status", "statusFatura", "situacao")));
+        try {
+            JsonNode node = objectMapper.readTree(json);
+            if (node.isObject() && (!node.has("status") || node.get("status").isNull())) {
+                ((ObjectNode) node).put("status", "ABERTA");
+                return objectMapper.writeValueAsString(node);
+            }
+        } catch (Exception ignored) {
+            // mantém json original se não for objeto
+        }
+        return json;
+    }
+
+    /**
+     * Canonicaliza dados de transação de cartão conforme {@code data-models.yaml} ({@code card_transaction}).
+     *
+     * @param rawData dados brutos JSON.
+     * @return JSON canônico.
+     */
+    public String canonicalizeTransacaoCartao(final String rawData) {
+        log.debug("Canonicalizando dados de transação de cartão");
+        return mapearCampos(rawData, List.of(
+                campo("transactionId", "transactionId", "idTransacao", "transacaoId", "id"),
+                campo("cardId", "cardId", "cartaoId", "idCartao"),
+                campo("billId", "billId", "faturaId", "idFatura"),
+                campo("amount", TipoCampo.DECIMAL, "amount", "valor", "transactionAmount", "valorTransacao"),
+                campo("currency", "currency", "moeda"),
+                campo("merchantName", "merchantName", "merchant", "estabelecimento", "nomeEstabelecimento", "descricao"),
+                campo("category", "category", "categoria", "transactionType", "tipoTransacao"),
+                campo("timestamp", TipoCampo.DATA, "timestamp", "transactionDate", "dataTransacao", "dataHora")));
+    }
+
+    /**
+     * Canonicaliza dados de seguro conforme {@code data-models.yaml} ({@code insurance}).
+     *
+     * @param rawData dados brutos JSON.
+     * @return JSON canônico.
+     */
+    public String canonicalizeSeguro(final String rawData) {
+        log.debug("Canonicalizando dados de seguro");
+        String json = mapearCampos(rawData, List.of(
+                campo("policyId", "policyId", "apoliceId", "idApolice", "id"),
+                campo("documentNumber", "documentNumber", "customerId", "clienteId", "cpfCnpj", "cpf", "cnpj", "documento"),
+                campo("type", TipoCampo.ENUM, SINONIMOS_TIPO_SEGURO, TIPOS_SEGURO, "type", "tipo", "tipoSeguro", "modalidade"),
+                campo("insurerName", "insurerName", "nomeSeguradora", "seguradora"),
+                campo("insuredAmount", TipoCampo.DECIMAL, "insuredAmount", "valorSegurado", "cobertura"),
+                campo("premiumAmount", TipoCampo.DECIMAL, "premiumAmount", "premioTotal", "premioMensal", "valorPremio"),
+                campo("startDate", TipoCampo.DATA, "startDate", "dataInicio"),
+                campo("endDate", TipoCampo.DATA, "endDate", "dataFim"),
+                campo("status", TipoCampo.ENUM, SINONIMOS_STATUS_SEGURO, STATUS_SEGURO, "status", "statusApolice", "situacao")));
+        try {
+            JsonNode node = objectMapper.readTree(json);
+            if (node.isObject() && (!node.has("status") || node.get("status").isNull())) {
+                ((ObjectNode) node).put("status", "ATIVA");
+                return objectMapper.writeValueAsString(node);
+            }
+        } catch (Exception ignored) {
+            // mantém json original se não for objeto
+        }
+        return json;
+    }
+
+    /**
+     * Canonicaliza dados cadastrais de cliente conforme {@code data-models.yaml} ({@code customer}).
+     *
+     * @param rawData dados brutos JSON.
+     * @return JSON canônico.
+     */
+    public String canonicalizePessoa(final String rawData) {
+        log.debug("Canonicalizando dados cadastrais de pessoa/cliente");
+        String json = mapearCampos(rawData, List.of(
+                campo("customerId", "customerId", "clienteId", "idCliente", "id"),
+                campo("documentNumber", "documentNumber", "cpfCnpj", "cpf", "cnpj", "documento"),
+                campo("personType", TipoCampo.ENUM, SINONIMOS_TIPO_PESSOA, TIPOS_PESSOA, "personType", "tipoPessoa", "tipo"),
+                campo("fullName", "fullName", "nomeCompleto", "name", "nome", "razaoSocial"),
+                campo("email", "email", "enderecoEletronico"),
+                campo("phone", "phone", "telefone", "celular"),
+                campo("status", TipoCampo.ENUM, SINONIMOS_STATUS_PESSOA, STATUS_PESSOA, "status", "statusCadastro", "situacao")));
         try {
             JsonNode node = objectMapper.readTree(json);
             if (node.isObject() && (!node.has("status") || node.get("status").isNull())) {

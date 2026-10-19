@@ -8,16 +8,26 @@ import com.aurix.platform.openfinance.distribution.dataproduct.entity.DataProduc
 import com.aurix.platform.openfinance.distribution.dataproduct.repository.DataProductRecordRepository;
 import com.aurix.platform.openfinance.distribution.dataproduct.repository.DataProductRepository;
 import com.aurix.platform.openfinance.distribution.dataproduct.service.DataProductService;
+import com.aurix.platform.openfinance.entity.CartaoConsentido;
 import com.aurix.platform.openfinance.entity.Consentimento;
 import com.aurix.platform.openfinance.entity.ContaConsentida;
 import com.aurix.platform.openfinance.entity.EmprestimoConsentido;
+import com.aurix.platform.openfinance.entity.FaturaConsentida;
 import com.aurix.platform.openfinance.entity.InvestimentoConsentido;
+import com.aurix.platform.openfinance.entity.PessoaConsentida;
+import com.aurix.platform.openfinance.entity.SeguroConsentido;
+import com.aurix.platform.openfinance.entity.TransacaoCartaoConsentida;
 import com.aurix.platform.openfinance.pipeline.lineage.entity.LineageRecord;
 import com.aurix.platform.openfinance.pipeline.lineage.repository.LineageRecordRepository;
+import com.aurix.platform.openfinance.repository.CartaoConsentidoRepository;
 import com.aurix.platform.openfinance.repository.ConsentimentoRepository;
 import com.aurix.platform.openfinance.repository.ContaConsentidaRepository;
 import com.aurix.platform.openfinance.repository.EmprestimoConsentidoRepository;
+import com.aurix.platform.openfinance.repository.FaturaConsentidaRepository;
 import com.aurix.platform.openfinance.repository.InvestimentoConsentidoRepository;
+import com.aurix.platform.openfinance.repository.PessoaConsentidaRepository;
+import com.aurix.platform.openfinance.repository.SeguroConsentidoRepository;
+import com.aurix.platform.openfinance.repository.TransacaoCartaoConsentidaRepository;
 import com.aurix.platform.openfinance.temporal.activity.ExtractDataActivityImpl;
 import com.aurix.platform.openfinance.temporal.activity.PublishDataActivityImpl;
 import com.aurix.platform.openfinance.temporal.activity.TransformDataActivityImpl;
@@ -47,7 +57,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Prova end-to-end (via TestWorkflowEnvironment, sem precisar de um Temporal
  * server real) que DataExtractionWorkflow, com as activities Spring reais
  * (não simuladas), extrai de múltiplos adaptadores (AccountSourceAdapter,
- * LoanSourceAdapter, InvestmentSourceAdapter), canonicaliza/valida/registra
+ * LoanSourceAdapter, InvestmentSourceAdapter, CardSourceAdapter,
+ * InsuranceSourceAdapter, CustomerSourceAdapter), canonicaliza/valida/registra
  * linhagem via PipelineOrchestrator, publica e materializa automaticamente
  * em DataProductService.
  */
@@ -82,6 +93,21 @@ class DataExtractionWorkflowIntegrationTest {
     private InvestimentoConsentidoRepository investimentoRepository;
 
     @Autowired
+    private CartaoConsentidoRepository cartaoRepository;
+
+    @Autowired
+    private FaturaConsentidaRepository faturaRepository;
+
+    @Autowired
+    private TransacaoCartaoConsentidaRepository transacaoCartaoRepository;
+
+    @Autowired
+    private SeguroConsentidoRepository seguroRepository;
+
+    @Autowired
+    private PessoaConsentidaRepository pessoaRepository;
+
+    @Autowired
     private LineageRecordRepository lineageRepository;
 
     @Autowired
@@ -99,6 +125,11 @@ class DataExtractionWorkflowIntegrationTest {
     void setUp() {
         dataProductRecordRepository.deleteAll();
         dataProductRepository.deleteAll();
+        transacaoCartaoRepository.deleteAll();
+        faturaRepository.deleteAll();
+        cartaoRepository.deleteAll();
+        seguroRepository.deleteAll();
+        pessoaRepository.deleteAll();
         investimentoRepository.deleteAll();
         emprestimoRepository.deleteAll();
         contaRepository.deleteAll();
@@ -339,5 +370,164 @@ class DataExtractionWorkflowIntegrationTest {
                 "DataProduct de investimentos deveria servir o registro canônico com investmentId=inv-multi-1");
         assertTrue(invRecordJson.contains("CDB"),
                 "DataProduct de investimentos deveria conter tipo canônico CDB");
+    }
+
+    @Test
+    void deveExecutarFluxoDeFaturasTransacoesCartaoSegurosEPessoasPontaAPonta() {
+        String consentId = "consent-domains-13-e2e";
+
+        Consentimento consentimento = new Consentimento();
+        consentimento.setConsentId(consentId);
+        consentimento.setClientId("client-domains-13");
+        consentimento.setUserId(99L);
+        consentimento.setStatus(Consentimento.StatusConsentimento.AUTHORISED);
+        consentimento.setPermissions("cards,card_bills,card_transactions,insurance,customers");
+        consentimento.setDataCriacao(LocalDateTime.now());
+        consentimento.setDataExpiracao(LocalDateTime.now().plusDays(30));
+        consentimentoRepository.save(consentimento);
+
+        CartaoConsentido cartao = new CartaoConsentido();
+        cartao.setConsentId(consentId);
+        cartao.setCartaoId("card-13-1");
+        cartao.setClienteId("12345678901");
+        cartao.setBandeira("VISA");
+        cartao.setFinalNumero("4321");
+        cartao.setStatusCartao("ATIVO");
+        cartao.setLimiteCredito(new BigDecimal("15000.00"));
+        cartao.setLimiteDisponivel(new BigDecimal("12000.00"));
+        cartao.setValorFaturaAtual(new BigDecimal("1850.00"));
+        cartao.setDataVencimentoFatura(LocalDate.of(2026, 11, 10));
+        cartao.setDataAtualizacao(LocalDateTime.now());
+        cartaoRepository.save(cartao);
+
+        FaturaConsentida fatura = new FaturaConsentida();
+        fatura.setConsentId(consentId);
+        fatura.setCartaoId("card-13-1");
+        fatura.setFaturaId("bill-13-1");
+        fatura.setValorTotal(new BigDecimal("1850.00"));
+        fatura.setValorMinimo(new BigDecimal("185.00"));
+        fatura.setValorPago(BigDecimal.ZERO);
+        fatura.setDataVencimento(LocalDate.of(2026, 11, 10));
+        fatura.setDataAtualizacao(LocalDateTime.now());
+        faturaRepository.save(fatura);
+
+        TransacaoCartaoConsentida txCartao = new TransacaoCartaoConsentida();
+        txCartao.setConsentId(consentId);
+        txCartao.setCartaoId("card-13-1");
+        txCartao.setTransactionId("txc-13-1");
+        txCartao.setValor(new BigDecimal("249.90"));
+        txCartao.setMoeda("BRL");
+        txCartao.setEstabelecimento("Aurix Tech Store");
+        txCartao.setTipoTransacao("COMPRA_A_VISTA");
+        txCartao.setDataTransacao(LocalDateTime.of(2026, 10, 18, 15, 30));
+        transacaoCartaoRepository.save(txCartao);
+
+        SeguroConsentido seguro = new SeguroConsentido();
+        seguro.setConsentId(consentId);
+        seguro.setApoliceId("pol-13-1");
+        seguro.setClienteId("12345678901");
+        seguro.setTipoSeguro("VIDA");
+        seguro.setNomeSeguradora("Aurix Seguradora S.A.");
+        seguro.setPremioMensal(new BigDecimal("120.00"));
+        seguro.setPremioTotal(new BigDecimal("1440.00"));
+        seguro.setValorSegurado(new BigDecimal("500000.00"));
+        seguro.setDataInicio(LocalDate.of(2026, 1, 1));
+        seguro.setDataFim(LocalDate.of(2027, 1, 1));
+        seguro.setStatusApolice("VIGENTE");
+        seguro.setDataAtualizacao(LocalDateTime.now());
+        seguroRepository.save(seguro);
+
+        PessoaConsentida pessoa = new PessoaConsentida();
+        pessoa.setConsentId(consentId);
+        pessoa.setCustomerId("cust-13-1");
+        pessoa.setTipoPessoa(PessoaConsentida.TipoPessoa.FISICA);
+        pessoa.setCpfCnpj("12345678901");
+        pessoa.setNomeCompleto("Ana Clara Aurix");
+        pessoa.setEmail("ana.clara@aurix.com");
+        pessoa.setTelefone("11988887777");
+        pessoa.setDataAtualizacao(LocalDateTime.now());
+        pessoaRepository.save(pessoa);
+
+        AuthorizedContext context = new AuthorizedContext(
+                "ctx-13-" + UUID.randomUUID(), "subject-13", consentId, 1,
+                "cards,card_bills,card_transactions,insurance,customers",
+                "[\"cards:READ\",\"card_bills:READ\",\"card_transactions:READ\",\"insurance:READ\",\"customers:READ\"]",
+                "[\"cartoes\",\"faturas\",\"transacoes_cartao\",\"seguros\",\"pessoas\"]",
+                LocalDateTime.now().plusHours(1), "ES256", "thumb-13", "sig-13");
+        authorizedContextRepository.save(context);
+
+        DataProduct prodFaturas = dataProductService.create(new DataProductRequest(
+                "Faturas Open Finance", "Produto de faturas", "faturas",
+                "FATURA_CARTAO", "json", "{}", "/api/v1/data-products/faturas"));
+        DataProduct prodTxCartao = dataProductService.create(new DataProductRequest(
+                "Transações Cartão Open Finance", "Produto de transações de cartão", "transacoes_cartao",
+                "TRANSACAO_CARTAO", "json", "{}", "/api/v1/data-products/transacoes-cartao"));
+        DataProduct prodSeguros = dataProductService.create(new DataProductRequest(
+                "Seguros Open Finance", "Produto de seguros", "seguros",
+                "SEGURO", "json", "{}", "/api/v1/data-products/seguros"));
+        DataProduct prodPessoas = dataProductService.create(new DataProductRequest(
+                "Pessoas Open Finance", "Produto cadastral de clientes", "pessoas",
+                "PESSOA", "json", "{}", "/api/v1/data-products/pessoas"));
+
+        ExecutionPlanRequest.SerializableNode nodeFaturas = new ExecutionPlanRequest.SerializableNode();
+        nodeFaturas.setNodeId("node-faturas");
+        nodeFaturas.setCapability("extract-faturas");
+        nodeFaturas.setResource("faturas");
+        nodeFaturas.setDependencies(List.of());
+        nodeFaturas.setIdempotencyKey(UUID.randomUUID().toString());
+        nodeFaturas.setTimeoutSeconds(30);
+
+        ExecutionPlanRequest.SerializableNode nodeTxCartao = new ExecutionPlanRequest.SerializableNode();
+        nodeTxCartao.setNodeId("node-transacoes_cartao");
+        nodeTxCartao.setCapability("extract-transacoes_cartao");
+        nodeTxCartao.setResource("transacoes_cartao");
+        nodeTxCartao.setDependencies(List.of());
+        nodeTxCartao.setIdempotencyKey(UUID.randomUUID().toString());
+        nodeTxCartao.setTimeoutSeconds(30);
+
+        ExecutionPlanRequest.SerializableNode nodeSeguros = new ExecutionPlanRequest.SerializableNode();
+        nodeSeguros.setNodeId("node-seguros");
+        nodeSeguros.setCapability("extract-seguros");
+        nodeSeguros.setResource("seguros");
+        nodeSeguros.setDependencies(List.of());
+        nodeSeguros.setIdempotencyKey(UUID.randomUUID().toString());
+        nodeSeguros.setTimeoutSeconds(30);
+
+        ExecutionPlanRequest.SerializableNode nodePessoas = new ExecutionPlanRequest.SerializableNode();
+        nodePessoas.setNodeId("node-pessoas");
+        nodePessoas.setCapability("extract-pessoas");
+        nodePessoas.setResource("pessoas");
+        nodePessoas.setDependencies(List.of());
+        nodePessoas.setIdempotencyKey(UUID.randomUUID().toString());
+        nodePessoas.setTimeoutSeconds(30);
+
+        ExecutionPlanRequest plano = new ExecutionPlanRequest();
+        plano.setPlanId("plan-13-" + UUID.randomUUID());
+        plano.setConsentId(consentId);
+        plano.setConsentVersion(1);
+        plano.setParticipantId("participant-13");
+        plano.setNodes(List.of(nodeFaturas, nodeTxCartao, nodeSeguros, nodePessoas));
+
+        WorkflowClient client = testEnv.getWorkflowClient();
+        DataExtractionWorkflow workflow = client.newWorkflowStub(DataExtractionWorkflow.class,
+                WorkflowOptions.newBuilder().setTaskQueue(TASK_QUEUE).build());
+
+        ExtractionResult result = workflow.execute(plano);
+
+        assertTrue(result.isSuccess(), "Workflow dos 4 novos domínios deveria ter sucesso: " + result.getErrors());
+        assertEquals(4, result.getNodesProcessed());
+        assertEquals(0, result.getNodesFailed());
+
+        assertEquals(1, dataProductService.serve(prodFaturas.getProductId(), null).getTotalCount());
+        assertTrue(dataProductService.serve(prodFaturas.getProductId(), null).getRecords().get(0).toString().contains("bill-13-1"));
+
+        assertEquals(1, dataProductService.serve(prodTxCartao.getProductId(), null).getTotalCount());
+        assertTrue(dataProductService.serve(prodTxCartao.getProductId(), null).getRecords().get(0).toString().contains("txc-13-1"));
+
+        assertEquals(1, dataProductService.serve(prodSeguros.getProductId(), null).getTotalCount());
+        assertTrue(dataProductService.serve(prodSeguros.getProductId(), null).getRecords().get(0).toString().contains("pol-13-1"));
+
+        assertEquals(1, dataProductService.serve(prodPessoas.getProductId(), null).getTotalCount());
+        assertTrue(dataProductService.serve(prodPessoas.getProductId(), null).getRecords().get(0).toString().contains("cust-13-1"));
     }
 }

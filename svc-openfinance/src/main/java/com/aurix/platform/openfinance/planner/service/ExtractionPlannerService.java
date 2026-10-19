@@ -422,6 +422,8 @@ public class ExtractionPlannerService implements ReconciliationRepairExecutor {
                 recursos.add("investimentos");
             } else if (upper.contains("PIX")) {
                 recursos.add("pix");
+            } else if (upper.contains("INSUR") || upper.contains("SEGURO")) {
+                recursos.add("seguros");
             } else if (upper.contains("CUSTOMER") || upper.contains("PESSOA")) {
                 recursos.add("pessoas");
             } else if (upper.contains("ACCOUNT") || upper.contains("CONTA")) {
