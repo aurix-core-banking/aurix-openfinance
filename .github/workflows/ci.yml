@@ -22,6 +22,18 @@ jobs:
           java-version: "25"
           cache: maven
 
+      - name: Checkout aurix-backend (para construir aurix-shared)
+        uses: actions/checkout@v4
+        with:
+          repository: aurix-core-banking/aurix-backend
+          path: backend
+
+      - name: Instalar aurix-shared no repositório Maven local
+        run: |
+          cd backend
+          mvn -B install -pl aurix-shared -am -DskipTests
+          cd ..
+
       - name: Run Architecture Invariants (INV-001 to INV-007), Rules Compliance & YAML Governance
         run: mvn -B test -Dtest=ArchitectureTest,ArchitectureYamlSchemaTest,ArchitectureRulesComplianceTest,SchemaCompatibilityTest,ConsentServiceContractTest
 
