@@ -56,13 +56,13 @@ public class ExtractionPlannerController {
         ExecutionPlan plano = plannerService.buscarPorPlanId(planId)
                 .orElseThrow(() -> new IllegalArgumentException("Plano não encontrado: " + planId));
 
-        return ResponseEntity.ok(Map.of(
-                "plan_id", plano.getPlanId(),
-                "status", plano.getStatus().name(),
-                "data_criacao", plano.getDataCriacao() != null ? plano.getDataCriacao().toString() : null,
-                "data_execucao", plano.getDataExecucao() != null ? plano.getDataExecucao().toString() : null,
-                "data_conclusao", plano.getDataConclusao() != null ? plano.getDataConclusao().toString() : null
-        ));
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("plan_id", plano.getPlanId());
+        body.put("status", plano.getStatus().name());
+        body.put("data_criacao", plano.getDataCriacao() != null ? plano.getDataCriacao().toString() : null);
+        body.put("data_execucao", plano.getDataExecucao() != null ? plano.getDataExecucao().toString() : null);
+        body.put("data_conclusao", plano.getDataConclusao() != null ? plano.getDataConclusao().toString() : null);
+        return ResponseEntity.ok(body);
     }
 
     @PostMapping("/{planId}/cancel")
