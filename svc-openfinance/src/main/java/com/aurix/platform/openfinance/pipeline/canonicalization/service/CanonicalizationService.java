@@ -258,13 +258,24 @@ public class CanonicalizationService {
      */
     public String canonicalizeInvestimento(final String rawData) {
         log.debug("Canonicalizando dados de investimento");
-        return mapearCampos(rawData, List.of(
+        String json = mapearCampos(rawData, List.of(
                 campo("investmentId", "investmentId", "idInvestimento", "investimentoId", "id"),
                 campo("documentNumber", "documentNumber", "customerId", "cpfCnpj", "cpf", "cnpj", "documento"),
                 campo("type", TipoCampo.ENUM, SINONIMOS_TIPO_INVESTIMENTO, TIPOS_INVESTIMENTO, "type", "tipo", "tipoInvestimento", "product", "produto"),
+                campo("issuer", "issuer", "emissor", "product", "produto", "instituicao"),
                 campo("currentValue", TipoCampo.DECIMAL, "currentValue", "totalValue", "valorAtual", "valorTotal", "saldoBruto"),
                 campo("appliedAmount", TipoCampo.DECIMAL, "appliedAmount", "unitValue", "valorAplicado", "valorInvestido", "principal"),
                 campo("status", TipoCampo.ENUM, SINONIMOS_STATUS_INVESTIMENTO, STATUS_INVESTIMENTO, "status", "statusInvestimento", "situacao")));
+        try {
+            JsonNode node = objectMapper.readTree(json);
+            if (node.isObject() && (!node.has("status") || node.get("status").isNull())) {
+                ((ObjectNode) node).put("status", "ATIVO");
+                return objectMapper.writeValueAsString(node);
+            }
+        } catch (Exception ignored) {
+            // mantém json original se não for objeto
+        }
+        return json;
     }
 
     /**

@@ -8,6 +8,7 @@ import com.aurix.platform.openfinance.planner.entity.ExecutionPlan;
 import com.aurix.platform.openfinance.planner.entity.PlanNode;
 import com.aurix.platform.openfinance.planner.entity.PlanStatus;
 import com.aurix.platform.openfinance.planner.repository.ExecutionPlanRepository;
+import com.aurix.platform.openfinance.reconciliation.service.ReconciliationRepairExecutor;
 import com.aurix.platform.openfinance.temporal.dispatcher.WorkflowExecutionDispatcher;
 import com.aurix.platform.openfinance.temporal.workflow.dto.ExecutionPlanRequest;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -31,38 +32,52 @@ import java.util.stream.Collectors;
  */
 @Service
 @Transactional
-public class ExtractionPlannerService {
+public class ExtractionPlannerService implements ReconciliationRepairExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(ExtractionPlannerService.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    private static final Map<String, List<String>> RESOURCE_DEPENDENCIES = Map.of(
-            "contas", List.of(),
-            "transacoes", List.of("contas"),
-            "cartoes", List.of("contas"),
-            "faturas", List.of("cartoes"),
-            "transacoes_cartao", List.of("cartoes"),
-            "emprestimos", List.of(),
-            "seguros", List.of(),
-            "pix", List.of("contas"),
-            "pessoas", List.of()
+    private static final Map<String, List<String>> RESOURCE_DEPENDENCIES = Map.ofEntries(
+            Map.entry("contas", List.of()),
+            Map.entry("transacoes", List.of("contas")),
+            Map.entry("cartoes", List.of("contas")),
+            Map.entry("faturas", List.of("cartoes")),
+            Map.entry("transacoes_cartao", List.of("cartoes")),
+            Map.entry("emprestimos", List.of()),
+            Map.entry("investimentos", List.of()),
+            Map.entry("seguros", List.of()),
+            Map.entry("pix", List.of("contas")),
+            Map.entry("pessoas", List.of())
     );
 
-    private static final Map<String, Integer> RESOURCE_TIMEOUTS = Map.of(
-            "contas", 30,
-            "transacoes", 120,
-            "cartoes", 30,
-            "faturas", 60,
-            "transacoes_cartao", 120,
-            "emprestimos", 30,
-            "seguros", 30,
-            "pix", 30,
-            "pessoas", 15
+    private static final Map<String, Integer> RESOURCE_TIMEOUTS = Map.ofEntries(
+            Map.entry("contas", 30),
+            Map.entry("transacoes", 120),
+            Map.entry("cartoes", 30),
+            Map.entry("faturas", 60),
+            Map.entry("transacoes_cartao", 120),
+            Map.entry("emprestimos", 30),
+            Map.entry("investimentos", 30),
+            Map.entry("seguros", 30),
+            Map.entry("pix", 30),
+            Map.entry("pessoas", 15)
     );
 
     private final ExecutionPlanRepository planRepository;
     private final WorkflowExecutionDispatcher dispatcher;
     private final AuthorizedContextService authorizedContextService;
+
+    @org.springframework.beans.factory.annotation.Value("${openfinance.planner.auto-orchestrate:false}")
+    private boolean autoOrchestrate;
+
+    @Autowired(required = false)
+    private com.aurix.platform.openfinance.discovery.service.ResourceDiscoveryService resourceDiscoveryService;
+
+    @Autowired(required = false)
+    private com.aurix.platform.openfinance.policy.service.PolicyEngineService policyEngineService;
+
+    @Autowired(required = false)
+    private com.aurix.platform.openfinance.repository.ConsentimentoRepository consentimentoRepository;
 
     public ExtractionPlannerService(ExecutionPlanRepository planRepository,
                                     WorkflowExecutionDispatcher dispatcher) {
@@ -76,6 +91,16 @@ public class ExtractionPlannerService {
         this.planRepository = planRepository;
         this.dispatcher = dispatcher;
         this.authorizedContextService = authorizedContextService;
+    }
+
+    public void configurarOrquestracaoConsentimento(
+            com.aurix.platform.openfinance.repository.ConsentimentoRepository consentimentoRepository,
+            com.aurix.platform.openfinance.discovery.service.ResourceDiscoveryService resourceDiscoveryService,
+            com.aurix.platform.openfinance.policy.service.PolicyEngineService policyEngineService) {
+        this.consentimentoRepository = consentimentoRepository;
+        this.resourceDiscoveryService = resourceDiscoveryService;
+        this.policyEngineService = policyEngineService;
+        this.autoOrchestrate = true;
     }
 
     /**
@@ -217,13 +242,18 @@ public class ExtractionPlannerService {
             throw new IllegalStateException("Não é possível cancelar plano em status: " + plano.getStatus());
         }
 
+        if (dispatcher != null) {
+            dispatcher.cancelarWorkflow(plano.getConsentId(), plano.getPlanId(), motivo);
+        }
         plano.setStatus(PlanStatus.CANCELADO);
+        plano.setDataConclusao(LocalDateTime.now());
         return planRepository.save(plano);
     }
 
     /**
-     * Cancela todos os planos em aberto (CRIADO ou EM_EXECUCAO) e revoga os contextos
-     * autorizados do consentimento informado (fluxo consent-revocation de architecture/flows.yaml).
+     * Cancela todos os planos em aberto (CRIADO ou EM_EXECUCAO), envia sinal de cancelamento
+     * aos workflows Temporal em execução e revoga os contextos autorizados do consentimento
+     * informado (fluxo consent-revocation de architecture/flows.yaml).
      */
     public int cancelarPlanosPorConsentimento(String consentId, String motivo) {
         if (authorizedContextService != null) {
@@ -234,6 +264,9 @@ public class ExtractionPlannerService {
         int cancelados = 0;
         for (ExecutionPlan plano : planos) {
             if (plano.getStatus() == PlanStatus.CRIADO || plano.getStatus() == PlanStatus.EM_EXECUCAO) {
+                if (dispatcher != null) {
+                    dispatcher.cancelarWorkflow(plano.getConsentId(), plano.getPlanId(), motivo);
+                }
                 plano.setStatus(PlanStatus.CANCELADO);
                 plano.setDataConclusao(LocalDateTime.now());
                 planRepository.save(plano);
@@ -269,6 +302,140 @@ public class ExtractionPlannerService {
         cancelarPlanosPorConsentimento(consentIdObj.toString(), reason);
     }
 
+    @EventListener
+    public void onConsentGranted(com.aurix.platform.openfinance.event.ConsentGrantedEvent event) {
+        if (autoOrchestrate && event != null && event.consentId() != null) {
+            orquestrarConsentimentoConcedido(event.consentId(), event.clientId());
+        }
+    }
+
+    @KafkaListener(
+            topics = {"consent.granted.v1"},
+            groupId = "aurix-openfinance-consent-granted-group"
+    )
+    public void onConsentGrantedKafka(Map<String, Object> envelope) {
+        if (envelope == null || envelope.get("consentId") == null) {
+            return;
+        }
+        String consentId = envelope.get("consentId").toString();
+        String clientId = envelope.get("clientId") != null ? envelope.get("clientId").toString() : "unknown";
+        orquestrarConsentimentoConcedido(consentId, clientId);
+    }
+
+    /**
+     * Orquestra automaticamente a cadeia declarada em {@code architecture/flows.yaml}
+     * ({@code consent-to-execution}):
+     * {@code Consent -> Resource Discovery -> Policy Enforcement -> Authorized Context -> Execution Plan -> Temporal}.
+     */
+    public Optional<PlanResponse> orquestrarConsentimentoConcedido(String consentId, String clientId) {
+        if (consentimentoRepository == null || resourceDiscoveryService == null
+                || policyEngineService == null || authorizedContextService == null) {
+            log.debug("Dependências de orquestração consent-to-execution ausentes para consentId={}", consentId);
+            return Optional.empty();
+        }
+        try {
+            Optional<com.aurix.platform.openfinance.entity.Consentimento> opt =
+                    consentimentoRepository.findByConsentId(consentId);
+            if (opt.isEmpty()) {
+                return Optional.empty();
+            }
+            com.aurix.platform.openfinance.entity.Consentimento consent = opt.get();
+            String permsStr = consent.getPermissions() != null ? consent.getPermissions() : "accounts";
+            List<String> rawPerms = Arrays.stream(permsStr.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .toList();
+            if (rawPerms.isEmpty()) {
+                rawPerms = List.of("accounts");
+            }
+
+            com.aurix.platform.openfinance.discovery.entity.ResourceGraph graph =
+                    resourceDiscoveryService.discover(consentId, rawPerms, Map.of());
+
+            String firstNodeId = graph.getNodes() != null && !graph.getNodes().isEmpty()
+                    ? graph.getNodes().get(0).getNodeId() : graph.getGraphId() + ":" + rawPerms.get(0);
+            String firstPerm = rawPerms.get(0);
+
+            com.aurix.platform.openfinance.policy.dto.PolicyEvaluationRequest evalReq =
+                    new com.aurix.platform.openfinance.policy.dto.PolicyEvaluationRequest(
+                            consentId, firstNodeId, firstPerm, firstPerm,
+                            String.valueOf(consent.getUserId() != null ? consent.getUserId() : clientId),
+                            "dpop-thumbprint-" + consentId,
+                            Map.of("clientId", clientId != null ? clientId : "unknown"));
+
+            com.aurix.platform.openfinance.policy.dto.PolicyDecisionResponse decision =
+                    policyEngineService.evaluate(evalReq);
+
+            if (decision.getDecision() != com.aurix.platform.openfinance.policy.entity.PolicyDecisionType.ALLOWED) {
+                log.warn("Política negou execução automática para consentId={}: {}", consentId, decision.getReason());
+                return Optional.empty();
+            }
+
+            List<String> recursosDominio = mapearPermissoesParaRecursos(rawPerms);
+            if (authorizedContextService.listActiveByConsentId(consentId).isEmpty()) {
+                String resourceGraphJson = objectMapper.writeValueAsString(Map.of(
+                        "graphId", graph.getGraphId(),
+                        "resources", recursosDominio));
+                authorizedContextService.create(
+                        decision,
+                        String.valueOf(consent.getUserId() != null ? consent.getUserId() : clientId),
+                        firstPerm,
+                        permsStr,
+                        resourceGraphJson,
+                        "ES256",
+                        "dpop-thumbprint-" + consentId);
+            }
+
+            if (!planRepository.findByConsentId(consentId).isEmpty()) {
+                return Optional.empty();
+            }
+
+            PlanRequest planRequest = new PlanRequest();
+            planRequest.setConsentId(consentId);
+            planRequest.setConsentVersion(consent.getVersion());
+            planRequest.setParticipantId(consent.getClientId() != null ? consent.getClientId() : clientId);
+            planRequest.setRequestedResources(recursosDominio);
+
+            return Optional.of(criarPlano(planRequest));
+        } catch (Exception e) {
+            log.warn("Falha na orquestração automática consent-to-execution para consentId={}: {}",
+                    consentId, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private List<String> mapearPermissoesParaRecursos(List<String> permissions) {
+        Set<String> recursos = new LinkedHashSet<>();
+        for (String p : permissions) {
+            String upper = p.trim().toUpperCase(Locale.ROOT);
+            if (upper.contains("TRANSAC") && upper.contains("CARD")) {
+                recursos.add("transacoes_cartao");
+            } else if (upper.contains("BILL") || upper.contains("FATURA")) {
+                recursos.add("faturas");
+            } else if (upper.contains("CARD") || upper.contains("CARTAO") || upper.contains("CARTOES")) {
+                recursos.add("cartoes");
+            } else if (upper.contains("TRANSAC")) {
+                recursos.add("transacoes");
+            } else if (upper.contains("LOAN") || upper.contains("EMPRESTIMO") || upper.contains("CREDIT")) {
+                recursos.add("emprestimos");
+            } else if (upper.contains("INVEST")) {
+                recursos.add("investimentos");
+            } else if (upper.contains("PIX")) {
+                recursos.add("pix");
+            } else if (upper.contains("CUSTOMER") || upper.contains("PESSOA")) {
+                recursos.add("pessoas");
+            } else if (upper.contains("ACCOUNT") || upper.contains("CONTA")) {
+                recursos.add("contas");
+            } else if (RESOURCE_DEPENDENCIES.containsKey(p.trim().toLowerCase(Locale.ROOT))) {
+                recursos.add(p.trim().toLowerCase(Locale.ROOT));
+            }
+        }
+        if (recursos.isEmpty()) {
+            recursos.add("contas");
+        }
+        return new ArrayList<>(recursos);
+    }
+
     public void atualizarStatus(String planId, PlanStatus novoStatus) {
         ExecutionPlan plano = planRepository.findByPlanId(planId)
                 .orElseThrow(() -> new IllegalArgumentException("Plano não encontrado: " + planId));
@@ -279,6 +446,35 @@ public class ExtractionPlannerService {
             plano.setDataConclusao(LocalDateTime.now());
         }
         planRepository.save(plano);
+    }
+
+    @Override
+    public int reextrairNode(String planId, String nodeId, int registrosFaltantes) {
+        String recurso = nodeId != null && nodeId.startsWith("node-")
+                ? nodeId.substring("node-".length()) : nodeId;
+        planRepository.findByPlanId(planId).ifPresent(plano -> {
+            ExecutionPlanRequest.SerializableNode repairNode = new ExecutionPlanRequest.SerializableNode();
+            repairNode.setNodeId(nodeId);
+            repairNode.setCapability("extract_" + recurso);
+            repairNode.setResource(recurso);
+            repairNode.setDependencies(List.of());
+            repairNode.setIdempotencyKey("repair-" + planId + "-" + nodeId + "-" + UUID.randomUUID());
+            repairNode.setTimeoutSeconds(RESOURCE_TIMEOUTS.getOrDefault(recurso, 30));
+            repairNode.setMaxAttempts(3);
+
+            ExecutionPlanRequest repairRequest = new ExecutionPlanRequest();
+            repairRequest.setPlanId(planId + "-repair-" + recurso);
+            repairRequest.setConsentId(plano.getConsentId());
+            repairRequest.setConsentVersion(plano.getConsentVersion());
+            repairRequest.setParticipantId(plano.getParticipanteId());
+            repairRequest.setDagJson(plano.getDagDefinition());
+            repairRequest.setNodes(List.of(repairNode));
+
+            if (dispatcher != null) {
+                dispatcher.despachar(repairRequest);
+            }
+        });
+        return registrosFaltantes;
     }
 
     private List<PlanNode> construirNodes(List<String> recursos, PlanRequest request) {

@@ -62,6 +62,9 @@ public class PipelineOrchestrator {
     private final PiiClassificationRepository piiClassificationRepository;
     private final ObjectMapper objectMapper;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.aurix.platform.openfinance.observability.OpenFinanceMetricsService metricsService;
+
     /**
      * Construtor com injeção de dependência.
      *
@@ -97,6 +100,11 @@ public class PipelineOrchestrator {
         this.objectMapper = objectMapper;
     }
 
+    public void setMetricsService(
+            final com.aurix.platform.openfinance.observability.OpenFinanceMetricsService metricsService) {
+        this.metricsService = metricsService;
+    }
+
     /**
      * Executa o pipeline completo de processamento de dados.
      *
@@ -109,10 +117,22 @@ public class PipelineOrchestrator {
      */
     public PipelineResult execute(final RawRecord raw, final ResourceType type,
             final String executionPlanId, final String consentId, final String resourceId) {
+        long pipelineStart = System.currentTimeMillis();
+        String pipelineExecutionId = UUID.randomUUID().toString();
+        if (consentId != null) {
+            org.slf4j.MDC.put("consent_id", consentId);
+        }
+        if (executionPlanId != null) {
+            org.slf4j.MDC.put("execution_plan_id", executionPlanId);
+        }
+        if (resourceId != null) {
+            org.slf4j.MDC.put("resource_id", resourceId);
+        }
+        org.slf4j.MDC.put("pipeline_execution_id", pipelineExecutionId);
+
         log.info("Iniciando pipeline: recordId={}, tipo={}, plan={}",
                 raw.getRecordId(), type, executionPlanId);
 
-        String pipelineExecutionId = UUID.randomUUID().toString();
         persistirRawRecord(raw);
 
         // 1. Canonicalização
@@ -185,6 +205,10 @@ public class PipelineOrchestrator {
             log.error("Falha no registro de linhagem: {}", e.getMessage());
             return PipelineResult.falha(EtapaPipeline.LINEAGE,
                     "Falha na linhagem: " + e.getMessage());
+        }
+
+        if (metricsService != null) {
+            metricsService.recordPipelineLatency("total", System.currentTimeMillis() - pipelineStart);
         }
 
         // 6. Publicação (sucesso)

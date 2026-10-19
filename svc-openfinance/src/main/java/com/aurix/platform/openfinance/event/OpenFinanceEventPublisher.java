@@ -44,7 +44,12 @@ public class OpenFinanceEventPublisher {
     }
 
     public void publishConsentGranted(String consentId, String clientId) {
-        publish("consent.granted.v1", consentId, null, null, Map.of("clientId", clientId));
+        String safeClient = clientId != null ? clientId : "unknown";
+        Map<String, Object> envelope = publish("consent.granted.v1", consentId, null, null,
+                Map.of("clientId", safeClient));
+        if (applicationEventPublisher != null) {
+            applicationEventPublisher.publishEvent(new ConsentGrantedEvent(consentId, safeClient, envelope));
+        }
     }
 
     public void publishConsentUpdated(String consentId, String reason) {
@@ -84,6 +89,18 @@ public class OpenFinanceEventPublisher {
     public void publishReconciliationRepaired(String consentId, String executionPlanId) {
         publish("reconciliation.repaired.v1", consentId, executionPlanId, null,
                 Map.of("executionPlanId", executionPlanId));
+    }
+
+    public Map<String, Object> publishTokenIssued(String consentId, String tokenId, String dpopThumbprint) {
+        return publish("token.issued.v1", consentId, null, null, Map.of(
+                "tokenId", tokenId != null ? tokenId : "unknown",
+                "dpopThumbprint", dpopThumbprint != null ? dpopThumbprint : ""));
+    }
+
+    public Map<String, Object> publishTokenRevoked(String consentId, String tokenId, String reason) {
+        return publish("token.revoked.v1", consentId, null, null, Map.of(
+                "tokenId", tokenId != null ? tokenId : "unknown",
+                "reason", reason != null ? reason : "Token revogado"));
     }
 
     /**

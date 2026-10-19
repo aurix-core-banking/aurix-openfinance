@@ -11,11 +11,13 @@ import com.aurix.platform.openfinance.distribution.dataproduct.service.DataProdu
 import com.aurix.platform.openfinance.entity.Consentimento;
 import com.aurix.platform.openfinance.entity.ContaConsentida;
 import com.aurix.platform.openfinance.entity.EmprestimoConsentido;
+import com.aurix.platform.openfinance.entity.InvestimentoConsentido;
 import com.aurix.platform.openfinance.pipeline.lineage.entity.LineageRecord;
 import com.aurix.platform.openfinance.pipeline.lineage.repository.LineageRecordRepository;
 import com.aurix.platform.openfinance.repository.ConsentimentoRepository;
 import com.aurix.platform.openfinance.repository.ContaConsentidaRepository;
 import com.aurix.platform.openfinance.repository.EmprestimoConsentidoRepository;
+import com.aurix.platform.openfinance.repository.InvestimentoConsentidoRepository;
 import com.aurix.platform.openfinance.temporal.activity.ExtractDataActivityImpl;
 import com.aurix.platform.openfinance.temporal.activity.PublishDataActivityImpl;
 import com.aurix.platform.openfinance.temporal.activity.TransformDataActivityImpl;
@@ -45,8 +47,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Prova end-to-end (via TestWorkflowEnvironment, sem precisar de um Temporal
  * server real) que DataExtractionWorkflow, com as activities Spring reais
  * (não simuladas), extrai de múltiplos adaptadores (AccountSourceAdapter,
- * LoanSourceAdapter), canonicaliza/valida/registra linhagem via PipelineOrchestrator,
- * publica e materializa automaticamente em DataProductService.
+ * LoanSourceAdapter, InvestmentSourceAdapter), canonicaliza/valida/registra
+ * linhagem via PipelineOrchestrator, publica e materializa automaticamente
+ * em DataProductService.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -76,6 +79,9 @@ class DataExtractionWorkflowIntegrationTest {
     private EmprestimoConsentidoRepository emprestimoRepository;
 
     @Autowired
+    private InvestimentoConsentidoRepository investimentoRepository;
+
+    @Autowired
     private LineageRecordRepository lineageRepository;
 
     @Autowired
@@ -93,6 +99,7 @@ class DataExtractionWorkflowIntegrationTest {
     void setUp() {
         dataProductRecordRepository.deleteAll();
         dataProductRepository.deleteAll();
+        investimentoRepository.deleteAll();
         emprestimoRepository.deleteAll();
         contaRepository.deleteAll();
         authorizedContextRepository.deleteAll();
@@ -185,7 +192,7 @@ class DataExtractionWorkflowIntegrationTest {
         consentimento.setClientId("client-multi-e2e");
         consentimento.setUserId(42L);
         consentimento.setStatus(Consentimento.StatusConsentimento.AUTHORISED);
-        consentimento.setPermissions("accounts,loans");
+        consentimento.setPermissions("accounts,loans,investments");
         consentimento.setDataCriacao(LocalDateTime.now());
         consentimento.setDataExpiracao(LocalDateTime.now().plusDays(30));
         consentimentoRepository.save(consentimento);
@@ -199,6 +206,16 @@ class DataExtractionWorkflowIntegrationTest {
         conta.setStatusConta("ACTIVE");
         conta.setDataAtualizacao(LocalDateTime.now());
         contaRepository.save(conta);
+
+        ContaConsentida conta2 = new ContaConsentida();
+        conta2.setConsentId(consentId);
+        conta2.setAccountId("acc-multi-2");
+        conta2.setInstitutionCode("AURIX");
+        conta2.setMoeda("BRL");
+        conta2.setTipoConta(ContaConsentida.TipoConta.CONTA_DE_DEPOSITO);
+        conta2.setStatusConta("ACTIVE");
+        conta2.setDataAtualizacao(LocalDateTime.now());
+        contaRepository.save(conta2);
 
         EmprestimoConsentido emprestimo = new EmprestimoConsentido();
         emprestimo.setConsentId(consentId);
@@ -218,9 +235,24 @@ class DataExtractionWorkflowIntegrationTest {
         emprestimo.setDataAtualizacao(LocalDateTime.now());
         emprestimoRepository.save(emprestimo);
 
+        InvestimentoConsentido investimento = new InvestimentoConsentido();
+        investimento.setConsentId(consentId);
+        investimento.setInvestimentoId("inv-multi-1");
+        investimento.setClienteId("12345678901");
+        investimento.setTipoInvestimento("CDB");
+        investimento.setProduto("CDB Aurix 120% CDI");
+        investimento.setQuantidade(new BigDecimal("10.0000"));
+        investimento.setValorUnitario(new BigDecimal("1050.0000"));
+        investimento.setValorTotal(new BigDecimal("10500.00"));
+        investimento.setStatusInvestimento("ATIVO");
+        investimento.setDataAtualizacao(LocalDateTime.now());
+        investimentoRepository.save(investimento);
+
         AuthorizedContext context = new AuthorizedContext(
                 "ctx-multi-" + UUID.randomUUID(), "subject-multi", consentId, 1,
-                "accounts,loans", "[\"accounts:READ\",\"loans:READ\"]", "[\"contas\",\"emprestimos\"]",
+                "accounts,loans,investments",
+                "[\"accounts:READ\",\"loans:READ\",\"investments:READ\"]",
+                "[\"contas\",\"emprestimos\",\"investimentos\"]",
                 LocalDateTime.now().plusHours(1), "ES256", "thumb-multi", "sig-multi");
         authorizedContextRepository.save(context);
 
@@ -230,6 +262,9 @@ class DataExtractionWorkflowIntegrationTest {
         DataProduct prodEmprestimos = dataProductService.create(new DataProductRequest(
                 "Empréstimos Open Finance", "Produto de empréstimos", "emprestimos",
                 "CREDITO", "json", "{}", "/api/v1/data-products/emprestimos"));
+        DataProduct prodInvestimentos = dataProductService.create(new DataProductRequest(
+                "Investimentos Open Finance", "Produto de investimentos", "investimentos",
+                "INVESTIMENTO", "json", "{}", "/api/v1/data-products/investimentos"));
 
         ExecutionPlanRequest.SerializableNode nodeContas = new ExecutionPlanRequest.SerializableNode();
         nodeContas.setNodeId("node-contas");
@@ -247,12 +282,20 @@ class DataExtractionWorkflowIntegrationTest {
         nodeEmprestimos.setIdempotencyKey(UUID.randomUUID().toString());
         nodeEmprestimos.setTimeoutSeconds(30);
 
+        ExecutionPlanRequest.SerializableNode nodeInvestimentos = new ExecutionPlanRequest.SerializableNode();
+        nodeInvestimentos.setNodeId("node-investimentos");
+        nodeInvestimentos.setCapability("extract-investments");
+        nodeInvestimentos.setResource("investimentos");
+        nodeInvestimentos.setDependencies(List.of());
+        nodeInvestimentos.setIdempotencyKey(UUID.randomUUID().toString());
+        nodeInvestimentos.setTimeoutSeconds(30);
+
         ExecutionPlanRequest plano = new ExecutionPlanRequest();
         plano.setPlanId("plan-multi-" + UUID.randomUUID());
         plano.setConsentId(consentId);
         plano.setConsentVersion(1);
         plano.setParticipantId("participant-multi");
-        plano.setNodes(List.of(nodeContas, nodeEmprestimos));
+        plano.setNodes(List.of(nodeContas, nodeEmprestimos, nodeInvestimentos));
 
         WorkflowClient client = testEnv.getWorkflowClient();
         DataExtractionWorkflow workflow = client.newWorkflowStub(DataExtractionWorkflow.class,
@@ -261,20 +304,25 @@ class DataExtractionWorkflowIntegrationTest {
         ExtractionResult result = workflow.execute(plano);
 
         assertTrue(result.isSuccess(), "Workflow multi-domínio deveria ter sucesso: " + result.getErrors());
-        assertEquals(2, result.getNodesProcessed());
+        assertEquals(3, result.getNodesProcessed());
         assertEquals(0, result.getNodesFailed());
 
         List<LineageRecord> lineages = lineageRepository.findByConsentIdOrderByCreatedAtAsc(consentId);
-        assertEquals(2, lineages.size(), "Deveria haver linhagem para contas e empréstimos");
+        assertEquals(4, lineages.size(),
+                "Deveria haver 4 registros de linhagem (2 contas em lote + 1 empréstimo + 1 investimento)");
         for (LineageRecord lineage : lineages) {
             assertNotNull(lineage.getPublicationId(),
                     "INV-003: publicationId deve ser preenchido na linhagem após publicação");
         }
 
         DataProductResponse servedContas = dataProductService.serve(prodContas.getProductId(), null);
-        assertEquals(1, servedContas.getTotalCount());
-        assertTrue(servedContas.getRecords().get(0).toString().contains("acc-multi-1"),
+        assertEquals(2, servedContas.getTotalCount(),
+                "Ambos os registros do lote de contas (acc-multi-1 e acc-multi-2) devem ser materializados");
+        String allContasJson = servedContas.getRecords().toString();
+        assertTrue(allContasJson.contains("acc-multi-1"),
                 "DataProduct de contas deveria servir o registro canônico com accountId=acc-multi-1");
+        assertTrue(allContasJson.contains("acc-multi-2"),
+                "DataProduct de contas deveria servir o segundo registro do lote accountId=acc-multi-2");
 
         DataProductResponse servedEmprestimos = dataProductService.serve(prodEmprestimos.getProductId(), null);
         assertEquals(1, servedEmprestimos.getTotalCount());
@@ -283,5 +331,13 @@ class DataExtractionWorkflowIntegrationTest {
                 "DataProduct de empréstimos deveria servir o registro canônico com loanId=loan-multi-1");
         assertTrue(loanRecordJson.contains("PESSOAL"),
                 "DataProduct de empréstimos deveria conter tipo canônico PESSOAL");
+
+        DataProductResponse servedInvestimentos = dataProductService.serve(prodInvestimentos.getProductId(), null);
+        assertEquals(1, servedInvestimentos.getTotalCount());
+        String invRecordJson = servedInvestimentos.getRecords().get(0).toString();
+        assertTrue(invRecordJson.contains("inv-multi-1"),
+                "DataProduct de investimentos deveria servir o registro canônico com investmentId=inv-multi-1");
+        assertTrue(invRecordJson.contains("CDB"),
+                "DataProduct de investimentos deveria conter tipo canônico CDB");
     }
 }

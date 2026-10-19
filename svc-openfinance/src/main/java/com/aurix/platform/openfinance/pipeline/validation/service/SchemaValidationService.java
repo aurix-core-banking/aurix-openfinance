@@ -119,6 +119,110 @@ public class SchemaValidationService {
     }
 
     /**
+     * Valida um payload JSON contra um JSON Schema oficial (Draft-07) localizado em
+     * {@code architecture/contracts/*.schema.json}.
+     *
+     * @param schemaJson  conteúdo do JSON Schema.
+     * @param payloadJson payload JSON a validar.
+     * @return resultado da validação com lista de erros estruturais.
+     */
+    public ValidationResult validateAgainstOfficialJsonSchema(final String schemaJson, final String payloadJson) {
+        List<String> errors = new ArrayList<>();
+        try {
+            JsonNode schemaNode = objectMapper.readTree(schemaJson);
+            JsonNode payloadNode = objectMapper.readTree(payloadJson);
+            validarNoContraJsonSchema("$", schemaNode, payloadNode, errors);
+        } catch (Exception e) {
+            errors.add("Erro ao processar JSON/Schema: " + e.getMessage());
+        }
+        return errors.isEmpty()
+                ? ValidationResult.valido(DEFAULT_SCHEMA_VERSION)
+                : ValidationResult.invalido(DEFAULT_SCHEMA_VERSION, errors);
+    }
+
+    private void validarNoContraJsonSchema(final String path, final JsonNode schema,
+                                            final JsonNode instance, final List<String> errors) {
+        if (schema == null || instance == null || instance.isNull()) {
+            errors.add(path + ": valor nulo ou ausente");
+            return;
+        }
+        if (schema.has("type")) {
+            String expectedType = schema.get("type").asText();
+            boolean typeOk = switch (expectedType) {
+                case "object" -> instance.isObject();
+                case "array" -> instance.isArray();
+                case "string" -> instance.isTextual();
+                case "integer" -> instance.isIntegralNumber();
+                case "number" -> instance.isNumber();
+                case "boolean" -> instance.isBoolean();
+                default -> true;
+            };
+            if (!typeOk) {
+                errors.add(path + ": tipo esperado '" + expectedType + "'");
+                return;
+            }
+        }
+        if (schema.has("enum") && schema.get("enum").isArray()) {
+            boolean match = false;
+            for (JsonNode val : schema.get("enum")) {
+                if (val.asText().equals(instance.asText())) {
+                    match = true;
+                    break;
+                }
+            }
+            if (!match) {
+                errors.add(path + ": valor '" + instance.asText() + "' fora do enum permitido");
+            }
+        }
+        if (instance.isNumber() && schema.has("minimum")) {
+            double min = schema.get("minimum").asDouble();
+            if (instance.asDouble() < min) {
+                errors.add(path + ": valor menor que o mínimo " + min);
+            }
+        }
+        if (instance.isArray()) {
+            if (schema.has("minItems") && instance.size() < schema.get("minItems").asInt()) {
+                errors.add(path + ": array possui menos itens que minItems=" + schema.get("minItems").asInt());
+            }
+            if (schema.has("items")) {
+                JsonNode itemSchema = schema.get("items");
+                for (int i = 0; i < instance.size(); i++) {
+                    validarNoContraJsonSchema(path + "[" + i + "]", itemSchema, instance.get(i), errors);
+                }
+            }
+        }
+        if (instance.isObject()) {
+            if (schema.has("required") && schema.get("required").isArray()) {
+                for (JsonNode req : schema.get("required")) {
+                    String field = req.asText();
+                    if (!instance.has(field) || instance.get(field).isNull()) {
+                        errors.add(path + ": campo obrigatório ausente '" + field + "'");
+                    }
+                }
+            }
+            JsonNode props = schema.get("properties");
+            if (schema.has("additionalProperties")
+                    && schema.get("additionalProperties").isBoolean()
+                    && !schema.get("additionalProperties").asBoolean()
+                    && props != null && props.isObject()) {
+                instance.fieldNames().forEachRemaining(fieldName -> {
+                    if (!props.has(fieldName)) {
+                        errors.add(path + ": propriedade adicional não permitida '" + fieldName + "'");
+                    }
+                });
+            }
+            if (props != null && props.isObject()) {
+                props.fieldNames().forEachRemaining(propName -> {
+                    if (instance.has(propName) && !instance.get(propName).isNull()) {
+                        validarNoContraJsonSchema(path + "." + propName,
+                                props.get(propName), instance.get(propName), errors);
+                    }
+                });
+            }
+        }
+    }
+
+    /**
      * Recupera um schema do registry.
      *
      * @param type    tipo de recurso.

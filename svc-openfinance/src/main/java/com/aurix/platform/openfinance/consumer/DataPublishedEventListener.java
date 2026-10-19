@@ -84,15 +84,40 @@ public class DataPublishedEventListener {
 
         for (DataProduct produto : produtos) {
             if (dataProductService != null && !canonicalData.isBlank()) {
-                CanonicalRecord record = new CanonicalRecord();
-                record.setCanonicalId(recordId);
-                record.setCanonicalData(canonicalData);
-                dataProductService.materialize(produto, List.of(record));
+                List<CanonicalRecord> records = construirRegistrosCanonicos(recordId, canonicalData);
+                dataProductService.materialize(produto, records);
             }
             subscriptionService.notifySubscribers(produto.getProductId(), EVENT_TYPE, envelope);
         }
 
         log.info("Distribuição conectada: recurso={}, consentId={}, produtos={}",
                 resource, consentId, produtos.size());
+    }
+
+    private List<CanonicalRecord> construirRegistrosCanonicos(String baseRecordId, String canonicalData) {
+        String trimmed = canonicalData.trim();
+        if (trimmed.startsWith("[")) {
+            try {
+                com.fasterxml.jackson.databind.JsonNode root =
+                        new com.fasterxml.jackson.databind.ObjectMapper().readTree(trimmed);
+                if (root != null && root.isArray() && root.size() > 0) {
+                    List<CanonicalRecord> lista = new java.util.ArrayList<>(root.size());
+                    for (int i = 0; i < root.size(); i++) {
+                        CanonicalRecord r = new CanonicalRecord();
+                        r.setCanonicalId(baseRecordId + "-" + i);
+                        com.fasterxml.jackson.databind.JsonNode elem = root.get(i);
+                        r.setCanonicalData(elem.isTextual() ? elem.asText() : elem.toString());
+                        lista.add(r);
+                    }
+                    return lista;
+                }
+            } catch (Exception ignored) {
+                // fallback para registro único
+            }
+        }
+        CanonicalRecord record = new CanonicalRecord();
+        record.setCanonicalId(baseRecordId);
+        record.setCanonicalData(canonicalData);
+        return List.of(record);
     }
 }

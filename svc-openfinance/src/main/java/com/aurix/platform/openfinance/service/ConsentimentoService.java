@@ -14,11 +14,13 @@ import com.aurix.platform.openfinance.repository.FaturaConsentidaRepository;
 import com.aurix.platform.openfinance.repository.TransacaoCartaoConsentidaRepository;
 import com.aurix.platform.openfinance.repository.EmprestimoConsentidoRepository;
 import com.aurix.platform.openfinance.repository.SeguroConsentidoRepository;
+import com.aurix.platform.openfinance.repository.InvestimentoConsentidoRepository;
 import com.aurix.platform.openfinance.repository.PixConsentidoRepository;
 import com.aurix.platform.openfinance.event.OpenFinanceEventPublisher;
 import com.aurix.platform.openfinance.trust.receipt.service.ConsentReceiptService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -45,6 +47,9 @@ public class ConsentimentoService {
     private final PixConsentidoRepository pixRepository;
     private final OpenFinanceEventPublisher eventPublisher;
     private final ConsentReceiptService consentReceiptService;
+
+    @Autowired(required = false)
+    private InvestimentoConsentidoRepository investimentoRepository;
 
     @Value("${aurix.openfinance.consent-max-duration-days:365}")
     private int maxDurationDays;
@@ -244,6 +249,10 @@ public class ConsentimentoService {
             .forEach(s -> seguroRepository.deleteById(s.getId()));
         pixRepository.findByConsentId(consentId)
             .forEach(p -> pixRepository.deleteById(p.getId()));
+        if (investimentoRepository != null) {
+            investimentoRepository.findByConsentId(consentId)
+                .forEach(i -> investimentoRepository.deleteById(i.getId()));
+        }
     }
 
     private ConsentimentoResponse toResponse(Consentimento c) {

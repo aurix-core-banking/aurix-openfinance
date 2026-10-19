@@ -37,7 +37,8 @@ public class Subscription {
      * criação/rotação). O receptor usa o mesmo segredo para validar
      * X-Webhook-Signature e confirmar origem + integridade da notificação.
      */
-    @Column(nullable = false, length = 100)
+    @Convert(converter = com.aurix.platform.openfinance.trust.crypto.AesGcmAttributeConverter.class)
+    @Column(nullable = false, length = 255)
     private String webhookSecret;
 
     @Enumerated(EnumType.STRING)

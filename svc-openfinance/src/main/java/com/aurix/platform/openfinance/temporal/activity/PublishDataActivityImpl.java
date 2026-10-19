@@ -92,8 +92,13 @@ public class PublishDataActivityImpl implements PublishDataActivity {
                 applicationEventPublisher.publishEvent(new DataPublishedEvent(event));
             }
 
-            if (request.getLineageId() != null) {
-                lineageService.atualizarPublicacao(request.getLineageId(), publicationId);
+            if (request.getLineageId() != null && !request.getLineageId().isBlank()) {
+                for (String lid : request.getLineageId().split(",")) {
+                    String trimmed = lid.trim();
+                    if (!trimmed.isEmpty()) {
+                        lineageService.atualizarPublicacao(trimmed, publicationId);
+                    }
+                }
             }
 
             result.setPublishedCount(request.getRecordCount());
