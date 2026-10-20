@@ -331,6 +331,37 @@ canonicalModels:
         values: [ATIVO, INATIVO]
         required: true
 
+  payment:
+    name: CanonicalPaymentInitiation
+    fields:
+      - name: paymentId
+        type: string
+        required: true
+      - name: consentId
+        type: string
+        required: true
+      - name: endToEndId
+        type: string
+        required: true
+      - name: amount
+        type: decimal
+        required: true
+      - name: currency
+        type: string
+        required: true
+      - name: status
+        type: enum
+        values: [PDNG, ACSC, RJCT, CANC]
+        required: true
+      - name: pixKey
+        type: string
+        required: true
+        pii: true
+        protection: tokenize
+      - name: createdAt
+        type: datetime
+        required: true
+
 piiTreatment:
   detection:
     methods:

@@ -416,6 +416,13 @@ domains:
         extractor: CoreCustomerExtractor
         source: PostgreSQL
 
+  payments:
+    capabilities:
+      pix-payments:
+        pipeline: PixPaymentPipeline
+        extractor: CorePixExtractor
+        source: PostgreSQL
+
 pipeline:
   requiredStages:
     - authorize
