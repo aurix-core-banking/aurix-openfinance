@@ -312,7 +312,7 @@ class ArchitectureRulesComplianceTest {
     private static Set<String> tabelasDasMigrations() throws IOException {
         Path migrations = archDir.resolveSibling("svc-openfinance/src/main/resources/db/migration");
         Set<String> tabelas = new TreeSet<>();
-        try (Stream<Path> arquivos = Files.list(migrations)) {
+        try (Stream<Path> arquivos = Files.walk(migrations)) {
             for (Path sql : arquivos.filter(p -> p.toString().endsWith(".sql")).toList()) {
                 Matcher m = CREATE_TABLE.matcher(Files.readString(sql));
                 while (m.find()) {
