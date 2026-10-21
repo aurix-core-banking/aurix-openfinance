@@ -15,6 +15,7 @@ import java.util.List;
  * plugaria trocando este bean por outro — nada no extractor mudaria.
  */
 @Component
+@org.springframework.context.annotation.Primary
 public class AurixCoreAccountSourceAdapter implements AccountSourceAdapter {
 
     private final ContaConsentidaRepository contaRepository;

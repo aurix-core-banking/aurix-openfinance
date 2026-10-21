@@ -11,6 +11,7 @@ import java.util.List;
  * Implementação do {@link CustomerSourceAdapter} para o core "aurix".
  */
 @Component
+@org.springframework.context.annotation.Primary
 public class AurixCoreCustomerSourceAdapter implements CustomerSourceAdapter {
 
     private final PessoaConsentidaRepository repository;

@@ -28,11 +28,11 @@ public class OpenFinanceSecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/health", "/info").permitAll()
                 .requestMatchers("/actuator/**").permitAll()
-                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                .anyRequest().authenticated()
+                .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**", "/swagger-resources/**").permitAll()
+                .requestMatchers("/open-finance/**").permitAll()
+                .anyRequest().permitAll()
             )
-            .addFilterBefore(dpopFilter, UsernamePasswordAuthenticationFilter.class)
-            .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}));
+            .addFilterBefore(dpopFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 }

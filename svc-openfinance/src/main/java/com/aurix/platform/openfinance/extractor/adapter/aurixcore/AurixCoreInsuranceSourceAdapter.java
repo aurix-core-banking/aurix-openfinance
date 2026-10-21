@@ -12,6 +12,7 @@ import java.util.List;
  * Implementação do {@link InsuranceSourceAdapter} para o core "aurix".
  */
 @Component
+@org.springframework.context.annotation.Primary
 public class AurixCoreInsuranceSourceAdapter implements InsuranceSourceAdapter {
 
     private final SeguroConsentidoRepository repository;

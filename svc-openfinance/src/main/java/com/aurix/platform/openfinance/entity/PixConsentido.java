@@ -24,7 +24,7 @@ public class PixConsentido {
     @Column(length = 30)
     private String tipoPix;
 
-    @Column(length = 100)
+    @Column(name = "chave_pix", length = 100)
     private String chavedePix;
 
     @Column(length = 30)

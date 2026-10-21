@@ -15,6 +15,7 @@ import java.util.List;
  * Implementação do {@link CardSourceAdapter} para o core banking "aurix".
  */
 @Component
+@org.springframework.context.annotation.Primary
 public class AurixCoreCardSourceAdapter implements CardSourceAdapter {
 
     private final CartaoConsentidoRepository cartaoRepository;

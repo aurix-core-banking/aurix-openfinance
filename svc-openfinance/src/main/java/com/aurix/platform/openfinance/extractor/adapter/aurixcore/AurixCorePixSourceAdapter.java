@@ -11,6 +11,7 @@ import java.util.List;
  * Implementação do {@link PixSourceAdapter} para o core banking "aurix".
  */
 @Component
+@org.springframework.context.annotation.Primary
 public class AurixCorePixSourceAdapter implements PixSourceAdapter {
 
     private final PixConsentidoRepository pixRepository;

@@ -1,0 +1,32 @@
+# ==============================================================================
+# AURIX OPEN FINANCE GATEWAY — DISTRIBUIÇÃO B2B STANDALONE
+# ==============================================================================
+# Imagem Docker multi-stage independente e agnóstica de Core Banking.
+# Pode ser executada em qualquer nuvem ou infraestrutura On-Premise/VPC bancária.
+# ==============================================================================
+
+FROM eclipse-temurin:25-jre-alpine
+
+LABEL maintainer="Aurix Core Banking <contato@aurix.com.br>"
+LABEL description="Aurix Open Finance Gateway - Gateway Regulatório FAPI BACEN para Bancos e Fintechs"
+LABEL version="1.0.0"
+
+ARG PORT=8096
+EXPOSE ${PORT}
+
+WORKDIR /app
+
+# Usuário não-root para conformidade e segurança bancária
+RUN addgroup -S aurix && adduser -S aurix -G aurix
+
+COPY svc-openfinance/target/svc-openfinance-*.jar /app/gateway.jar
+
+USER aurix
+
+ENV SERVER_PORT=${PORT} \
+    SPRING_PROFILES_ACTIVE=prod \
+    AURIX_OF_CONNECTOR_TYPE=rest \
+    AURIX_OF_TENANT_ID=default \
+    JAVA_OPTS="-XX:+UseG1GC -XX:MaxRAMPercentage=75.0"
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/gateway.jar"]

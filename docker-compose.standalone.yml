@@ -1,0 +1,98 @@
+version: '3.8'
+
+# ==============================================================================
+# AURIX OPEN FINANCE GATEWAY — PACOTE COMERCIAL B2B
+# ==============================================================================
+# Stack completa e independente para implantação rápida em bancos, cooperativas,
+# financeiras, SCDs ou fintechs.
+#
+# Para executar em modo Sandbox de teste:
+#   docker compose -f docker-compose.standalone.yml up -d
+#
+# Para conectar ao seu Core Banking REST:
+#   Ajuste AURIX_OF_CONNECTOR_TYPE=rest e AURIX_OF_CONNECTOR_REST_BASE_URL
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # Banco de Dados Dedicado do Open Finance
+  # ----------------------------------------------------------------------------
+  openfinance-db:
+    image: postgres:15-alpine
+    container_name: of-b2b-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: openfinance_db
+      POSTGRES_USER: of_user
+      POSTGRES_PASSWORD: of_secure_password_2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - of_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U of_user -d openfinance_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # Cache e Rate-Limiter Regulatório
+  # ----------------------------------------------------------------------------
+  openfinance-redis:
+    image: redis:7-alpine
+    container_name: of-b2b-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - of_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # Aurix Open Finance Gateway (Serviço Principal)
+  # ----------------------------------------------------------------------------
+  openfinance-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.standalone
+    container_name: of-b2b-gateway
+    restart: unless-stopped
+    ports:
+      - "8096:8096"
+    environment:
+      SERVER_PORT: "8096"
+      SPRING_PROFILES_ACTIVE: prod
+      # Banco de dados
+      SPRING_DATASOURCE_URL: jdbc:postgresql://openfinance-db:5432/openfinance_db
+      SPRING_DATASOURCE_USERNAME: of_user
+      SPRING_DATASOURCE_PASSWORD: of_secure_password_2026
+      SPRING_JPA_HIBERNATE_DDL_AUTO: none
+      # Redis
+      SPRING_DATA_REDIS_HOST: openfinance-redis
+      SPRING_REDIS_HOST: openfinance-redis
+      # Parametrização Multi-Tenant & White-Label da Instituição
+      AURIX_OF_TENANT_ID: ${AURIX_OF_TENANT_ID:-banco-cliente}
+      AURIX_OF_TENANT_NAME: ${AURIX_OF_TENANT_NAME:-Banco Parceiro S.A.}
+      AURIX_OF_TENANT_CNPJ: ${AURIX_OF_TENANT_CNPJ:-12.345.678/0001-90}
+      AURIX_OF_PARTICIPANT_CODE: ${AURIX_OF_PARTICIPANT_CODE:-12345678}
+      AURIX_OF_BRAND_NAME: ${AURIX_OF_BRAND_NAME:-Banco Parceiro}
+      AURIX_OF_PRIMARY_COLOR: ${AURIX_OF_PRIMARY_COLOR:-#0052FF}
+      # Conector de Core Banking (Opções: 'sandbox' para testes, 'rest' para produção)
+      AURIX_OF_CONNECTOR_TYPE: ${AURIX_OF_CONNECTOR_TYPE:-sandbox}
+      AURIX_OF_CONNECTOR_REST_BASE_URL: ${AURIX_OF_CONNECTOR_REST_BASE_URL:-http://host.docker.internal:8081/api}
+      AURIX_OF_CONNECTOR_REST_API_KEY: ${AURIX_OF_CONNECTOR_REST_API_KEY:-}
+      # Desativação de DPoP estrito para testes rápidos (ative em produção com mTLS)
+      AURIX_OF_DPOP_REQUIRE: "false"
+    depends_on:
+      openfinance-db:
+        condition: service_healthy
+      openfinance-redis:
+        condition: service_healthy
+
+volumes:
+  of_db_data:
+  of_redis_data:

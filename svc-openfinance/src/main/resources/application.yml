@@ -66,6 +66,7 @@ springdoc:
     path: /v3/api-docs
   swagger-ui:
     path: /swagger-ui.html
+  override-with-generic-response: false
 
 aurix:
   security:
@@ -88,3 +89,17 @@ aurix:
         strict: ${AURIX_OF_MTLS_STRICT:false}
         certificate-header: ${AURIX_OF_MTLS_CERT_HEADER:X-Client-Cert}
         trusted-ca-pem: ${AURIX_OF_MTLS_TRUSTED_CA:}
+
+    tenant:
+      id: ${AURIX_OF_TENANT_ID:aurix}
+      name: ${AURIX_OF_TENANT_NAME:Aurix Banco Multiplo S.A.}
+      cnpj: ${AURIX_OF_TENANT_CNPJ:00.000.000/0001-91}
+      participant-code: ${AURIX_OF_PARTICIPANT_CODE:00000000}
+      brand-name: ${AURIX_OF_BRAND_NAME:Aurix Bank}
+      primary-color: ${AURIX_OF_PRIMARY_COLOR:#0052FF}
+    connector:
+      type: ${AURIX_OF_CONNECTOR_TYPE:aurix}
+      rest:
+        base-url: ${AURIX_OF_CONNECTOR_REST_BASE_URL:http://localhost:8081/api}
+        api-key: ${AURIX_OF_CONNECTOR_REST_API_KEY:}
+        timeout-ms: ${AURIX_OF_CONNECTOR_REST_TIMEOUT:5000}

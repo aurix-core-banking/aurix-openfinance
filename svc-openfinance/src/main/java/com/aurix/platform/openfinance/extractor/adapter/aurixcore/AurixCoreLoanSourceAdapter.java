@@ -11,6 +11,7 @@ import java.util.List;
  * Implementação do {@link LoanSourceAdapter} para o core banking "aurix".
  */
 @Component
+@org.springframework.context.annotation.Primary
 public class AurixCoreLoanSourceAdapter implements LoanSourceAdapter {
 
     private final EmprestimoConsentidoRepository emprestimoRepository;

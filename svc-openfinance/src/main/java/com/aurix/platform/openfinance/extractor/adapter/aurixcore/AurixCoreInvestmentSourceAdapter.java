@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
  * Implementação do {@link InvestmentSourceAdapter} para o core banking/corretora "aurix".
  */
 @Component
+@org.springframework.context.annotation.Primary
 public class AurixCoreInvestmentSourceAdapter implements InvestmentSourceAdapter {
 
     private final InvestimentoConsentidoRepository investimentoRepository;
